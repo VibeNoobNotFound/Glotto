@@ -136,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Settings
 
     @objc private func openSettings() {
-        if let existing = settingsWindow, existing.isVisible {
+        if let existing = settingsWindow {
             existing.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -152,6 +152,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.minSize = NSSize(width: 440, height: 560)
+        window.isReleasedWhenClosed = false
+        window.delegate = self
         window.title = "Glotto Settings"
         window.contentView = NSHostingView(rootView: view)
         window.center()
@@ -163,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Onboarding
 
     private func showOnboarding() {
-        if let existing = onboardingWindow, existing.isVisible {
+        if let existing = onboardingWindow {
             existing.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -181,6 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.minSize = NSSize(width: 480, height: 350)
+        window.isReleasedWhenClosed = false
+        window.delegate = self
         window.title = "Glotto — Setup"
         window.contentView = NSHostingView(rootView: view)
         window.center()
@@ -197,6 +201,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             if self.eventTapManager.isArmed {
                 self.compositionController.cancelComposition()
+            }
+        }
+    }
+}
+
+// MARK: - NSWindowDelegate
+
+extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        if let window = notification.object as? NSWindow {
+            if window == settingsWindow {
+                settingsWindow = nil
+            } else if window == onboardingWindow {
+                onboardingWindow = nil
             }
         }
     }
