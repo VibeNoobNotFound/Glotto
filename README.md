@@ -1,35 +1,30 @@
 # Glotto
 
-Glotto is a lightweight macOS utility that lets you type phonetically in Latin characters into **any text field in any application** (Safari, MS Word, Pages, Slack, Xcode, terminal, etc.) and instantly commit the correct transliterated script candidates. 
+Glotto is a lightweight macOS utility that lets you type phonetically in Latin characters into any text field (in Safari, MS Word, Pages, terminal, etc.) and commit transliterated script candidates. 
 
-It acts as a floating IME (Input Method Editor) helper without requiring complex setup in System Settings → Keyboard → Input Sources.
-
----
-
-## Key Features
-
-- 🔠 **Phonetic Transliteration:** Type words phonetically (e.g., type `ammawarun` to get `අම්මාවරුන්` in Sinhala).
-- 🪄 **Vibrant Liquid Glass UI:** A modern floating panel next to your cursor with:
-  - Specular borders and dynamic dark-mode background tinting.
-  - Snappy pop-up and exit animations matching the macOS Quick Lookup/Spotlight feel.
-- ⚡ **Seamless Insertion:** Cleans up the phonetic Latin input and inserts the chosen script candidate at the insertion point.
-- 🎛️ **Pluggable & Reorderable Providers:** Prioritize between different transliteration engines (currently supports Google Input Tools, with architecture ready for offline/rule-based modules).
-- 🎹 **Keyboard & Click Navigation:** 
-  - Arrow keys or number keys `1`–`5` to navigate and commit candidates.
-  - Direct mouse clicks on candidate rows.
-  - Esc or navigating away with Left/Right arrows cancels composition safely.
-- 🔊 **Sound Feedback:** Select system sound effects (or "None") to notify you when Glotto is armed or disarmed.
-- ⚙️ **Custom Shortcut:** Configure a global hotkey via KeyboardShortcuts to quickly toggle Glotto's arming state.
+It acts as a helper panel next to your cursor without requiring any keyboard input source configuration in System Settings.
 
 ---
 
-## How It Works Under the Hood
+## Features
 
-Glotto bypasses the complex macOS Input Method Kit infrastructure to remain lightweight and portable:
-1. **Accessibility Event Tap:** Uses a session-level global event tap (`.cgSessionEventTap`) that monitors keystrokes system-wide *only* when armed.
-2. **Buffer Interception:** When you start typing Latin letters, Glotto swallows the keystrokes and routes them to its buffer. It queries the active transliteration providers in your priority order.
-3. **Cursor Tracking:** Utilizes the macOS Accessibility (AX) API to locate the text field's caret bounds and position the panel immediately below the insertion point.
-4. **Text Injection:** When a candidate is committed, Glotto performs a zero-length AX selection write (`kAXSelectedTextAttribute`) to insert the text, falling back to a clipboard-paste mechanism if the target application is non-AX compliant.
+- 🔠 **Phonetic Transliteration:** Type words phonetically (e.g., type `amma` to get `අම්මා` in Sinhala).
+- 🔌 **Transliteration Data Providers:** Candidates are retrieved in real-time from active transliteration providers. Currently, this queries the public, online **Google Input Tools API** (`inputtools.google.com/request`) to fetch candidates based on the phonetic string and language code.
+- 🪄 **Vibrant Overlay UI:** A floating candidate panel positioned right at your text cursor with rounded corners, Specular glow borders, and support for macOS system dark mode.
+- 🎹 **Snappy Animations:** Snappy pop-up and fade-out spring animations style-modeled after macOS Quick Lookup.
+- 🎛️ **Priority Reordering:** Change the priority order of transliteration engines directly from the settings panel.
+- 🎹 **Keyboard & Click Control:** Use arrow keys or numbers `1`–`5` to commit candidates, or click directly on candidate rows.
+- 🔊 **Sound Feedback:** Audio alerts play when toggling Glotto on or off, with configurable sound options in Settings.
+- ⚙️ **Global Shortcut:** Customize the hotkey to quickly enable or disable phonetic typing.
+
+---
+
+## How It Works
+
+1. **Accessibility Event Tap:** While armed, Glotto monitors keystrokes globally using a session-level event tap (`.cgSessionEventTap`).
+2. **Buffer Interception:** Glotto swallows Latin keystrokes and appends them to a local buffer.
+3. **Data Fetching:** The buffer is sent to the active provider fallback chain (currently Google Input Tools) to fetch matching candidate suggestions.
+4. **Insertion:** When you select a candidate, Glotto erases the Latin text and injects the committed characters at your cursor via the Accessibility API (with copy/paste fallback for non-compliant apps).
 
 ---
 
@@ -52,5 +47,5 @@ Glotto bypasses the complex macOS Input Method Kit infrastructure to remain ligh
    Open `Glotto.MacOS/Glotto/Glotto.xcodeproj` in Xcode.
 3. **Build and Run:**
    - Press `Cmd + R` in Xcode.
-   - Upon first launch, Glotto will request **Accessibility permissions** (required to intercept shortcut keys, determine cursor positioning, and inject text).
-   - If you rebuild the app binary later, you may need to toggle the permission Off and On in System Settings → Privacy & Security → Accessibility due to macOS binary-signature caching.
+   - Glotto requires **Accessibility permissions** to capture keys and insert text.
+   - *Note:* If you rebuild the app binary later, you may need to toggle the permission Off and On in System Settings → Privacy & Security → Accessibility due to macOS binary-signature caching.
