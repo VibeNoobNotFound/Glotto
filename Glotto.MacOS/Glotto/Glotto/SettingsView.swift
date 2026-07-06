@@ -13,10 +13,13 @@ struct SettingsView: View {
 
     @EnvironmentObject private var permissionManager: PermissionManager
     @AppStorage("activeProfileID") private var activeProfileID: String = LanguageProfile.sinhala.id
+    @AppStorage("enableSound") private var enableSound: String = "Tink"
+    @AppStorage("disableSound") private var disableSound: String = "Blow"
 
     // In Phase 1 there's exactly one built-in profile. The list is already the right structure
     // for when Phase N adds more — no UI change needed, just more items in `LanguageProfile.builtIn`.
     private let profiles = LanguageProfile.builtIn
+    private let soundOptions = ["None", "Tink", "Blow", "Pop", "Submarine", "Glass", "Bottle", "Funk", "Ping", "Hero"]
 
     var body: some View {
         Form {
@@ -40,6 +43,27 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+            }
+
+            // MARK: Sound Feedback
+            Section("Sound Effects") {
+                Picker("Armed Sound", selection: $enableSound) {
+                    ForEach(soundOptions, id: \.self) { sound in
+                        Text(sound).tag(sound)
+                    }
+                }
+                .onChange(of: enableSound) { _, newValue in
+                    previewSound(newValue)
+                }
+
+                Picker("Disarmed Sound", selection: $disableSound) {
+                    ForEach(soundOptions, id: \.self) { sound in
+                        Text(sound).tag(sound)
+                    }
+                }
+                .onChange(of: disableSound) { _, newValue in
+                    previewSound(newValue)
+                }
             }
 
             // MARK: Permissions
@@ -105,6 +129,11 @@ struct SettingsView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private func previewSound(_ name: String) {
+        guard name != "None" else { return }
+        NSSound(named: NSSound.Name(name))?.play()
     }
 }
 

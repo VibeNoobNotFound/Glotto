@@ -121,7 +121,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         eventTapManager.toggle()
-        updateStatusIcon(armed: eventTapManager.isArmed)
+        let armed = eventTapManager.isArmed
+        updateStatusIcon(armed: armed)
+        
+        // Retrieve and play selected sound
+        let soundKey = armed ? "enableSound" : "disableSound"
+        let defaultSound = armed ? "Tink" : "Blow"
+        let soundName = UserDefaults.standard.string(forKey: soundKey) ?? defaultSound
+        if soundName != "None" {
+            NSSound(named: NSSound.Name(soundName))?.play()
+        }
     }
 
     // MARK: - Settings
