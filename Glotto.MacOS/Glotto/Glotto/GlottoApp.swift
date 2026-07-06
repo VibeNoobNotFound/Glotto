@@ -151,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.minSize = NSSize(width: 440, height: 350)
+        window.minSize = NSSize(width: 440, height: 420)
         window.title = "Glotto Settings"
         window.contentView = NSHostingView(rootView: view)
         window.center()
