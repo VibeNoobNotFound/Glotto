@@ -16,9 +16,14 @@ final class CandidateOverlayController {
     /// Set by CompositionController. Called when the user clicks a candidate row.
     var onCandidateSelected: ((Int) -> Void)?
 
+    private var isPresented = false
+    private var lastSession: CompositionSession?
+
     // MARK: - Show / update / hide
 
     func showOrUpdate(session: CompositionSession) {
+        self.isPresented = true
+        self.lastSession = session
         let isFirstShow = (panel == nil)
         if panel == nil {
             createPanel(session: session)
@@ -45,13 +50,28 @@ final class CandidateOverlayController {
     }
 
     func hide() {
-        guard let panel, panel.alphaValue > 0 else { return }
+        guard let panel, isPresented else { return }
+        self.isPresented = false
+        
+        // Notify SwiftUI view to start its scale-down / slide-down animation
+        if let lastSession {
+            update(session: lastSession)
+        }
+        
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.12
+            // Keep window animation synchronized with the SwiftUI spring animation duration
+            context.duration = 0.18
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().alphaValue = 0.0
-        }, completionHandler: {
-            panel.orderOut(nil)
+        }, completionHandler: { [weak self] in
+            guard let self else { return }
+            // Only orderOut and clean up if it was not shown again during the fadeout
+            if !self.isPresented {
+                panel.orderOut(nil)
+                // Clear references so the next creation triggers onAppear cleanly
+                self.panel = nil
+                self.hostingView = nil
+            }
         })
     }
 
@@ -142,6 +162,6 @@ final class CandidateOverlayController {
     }
     /// Constructs a CandidatePanelView wired to the click callback.
     private func makePanelView(session: CompositionSession) -> CandidatePanelView {
-        CandidatePanelView(session: session, onSelect: onCandidateSelected)
+        CandidatePanelView(session: session, isPresented: isPresented, onSelect: onCandidateSelected)
     }
 }

@@ -5,8 +5,10 @@ import SwiftUI
 struct CandidatePanelView: View {
 
     let session: CompositionSession
+    let isPresented: Bool
     /// Called when the user clicks a row. Argument is the candidate index.
     var onSelect: ((Int) -> Void)?
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isVisible = false
 
     // MARK: - Body
@@ -14,27 +16,47 @@ struct CandidatePanelView: View {
     var body: some View {
         ZStack {
             // Frosted glass background — looks native and lets the user see the text behind.
-            RoundedRectangle(cornerRadius: 12)
-                .glassEffect( in: .rect(cornerRadius: 12))
-                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 3)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .glassEffect(in: .rect(cornerRadius: 18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(colorScheme == .dark ? Color.black.opacity(0.35) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(colorScheme == .dark ? 0.12 : 0.35),
+                                    Color.white.opacity(colorScheme == .dark ? 0.03 : 0.08)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 4)
 
             VStack(alignment: .leading, spacing: 0) {
                 headerRow
                 Divider().opacity(0.4)
                 contentArea
             }
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .frame(minWidth: 200, maxWidth: 320)
         .fixedSize(horizontal: false, vertical: true)
         .padding(1) // 1pt border room for the shadow to show
-        .scaleEffect(isVisible ? 1.0 : 0.96)
-        .opacity(isVisible ? 1.0 : 0.0)
+        .scaleEffect(isVisible && isPresented ? 1.0 : 0.88)
+        .offset(y: isVisible && isPresented ? 0 : 10)
+        .opacity(isVisible && isPresented ? 1.0 : 0.0)
         .onAppear {
-            withAnimation(.spring(response: 0.18, dampingFraction: 0.76)) {
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.65)) {
                 isVisible = true
             }
         }
+        .animation(.spring(response: 0.22, dampingFraction: 0.65), value: isPresented)
     }
 
     // MARK: - Sub-views
@@ -215,7 +237,6 @@ private struct CandidateRow: View {
     }
 }
 
-#if DEBUG
 #Preview {
     CandidatePanelView(session: {
         var s = CompositionSession(profile: .sinhala)
@@ -227,8 +248,7 @@ private struct CandidateRow: View {
         ]
         s.selectionIndex = 0
         return s
-    }())
+    }(), isPresented: true)
     .frame(width: 300)
     .padding()
 }
-#endif

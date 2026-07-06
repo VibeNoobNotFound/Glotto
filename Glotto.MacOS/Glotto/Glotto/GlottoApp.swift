@@ -138,10 +138,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 440, height: 420),
-            styleMask: [.titled, .closable, .miniaturizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
+        window.minSize = NSSize(width: 440, height: 350)
         window.title = "Glotto Settings"
         window.contentView = NSHostingView(rootView: view)
         window.center()
@@ -166,10 +167,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 400),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
+        window.minSize = NSSize(width: 480, height: 350)
         window.title = "Glotto — Setup"
         window.contentView = NSHostingView(rootView: view)
         window.center()
