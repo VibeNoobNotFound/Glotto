@@ -136,13 +136,12 @@ final class CompositionController: ObservableObject {
             return true
 
         case .commit:   // Enter — commit highlighted candidate, end composition
-            commitSelected()
+            commitSelected(appending: "")
             return true
 
-        case .space:    // Space — commit top candidate, then let the space through as a word separator
-            commitSelected()
-            // Don't swallow space itself — we let it pass through to naturally separate words.
-            return false
+        case .space:    // Space — commit top candidate, appending a space
+            commitSelected(appending: " ")
+            return true
 
         case .escape:
             cancelComposition()
@@ -152,7 +151,7 @@ final class CompositionController: ObservableObject {
             let idx = n - 1
             if idx >= 0 && idx < session.candidates.count {
                 session.selectionIndex = idx
-                commitSelected()
+                commitSelected(appending: "")
             }
             return true
         }
@@ -160,7 +159,7 @@ final class CompositionController: ObservableObject {
 
     // MARK: - Commit / cancel
 
-    private func commitSelected() {
+    func commitSelected(appending suffix: String = " ") {
         guard let candidate = session.selectedCandidate else {
             cancelComposition()
             return
@@ -172,8 +171,8 @@ final class CompositionController: ObservableObject {
         session.reset()
         overlayController.hide()
 
-        // Trailing space so the next word can start immediately after commit.
-        let textToInject = candidate.text + " "
+        // Append the custom suffix (e.g., space, punctuation, or empty string)
+        let textToInject = candidate.text + suffix
 
         // Small delay so the overlay fade-out finishes before injection fires.
         Task { @MainActor in
@@ -186,7 +185,7 @@ final class CompositionController: ObservableObject {
     func commitCandidate(at index: Int) {
         guard index >= 0, index < session.candidates.count else { return }
         session.selectionIndex = index
-        commitSelected()
+        commitSelected(appending: " ")
     }
 
     func cancelComposition() {

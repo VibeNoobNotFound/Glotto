@@ -153,12 +153,21 @@ final class EventTapManager {
             return Unmanaged.passUnretained(event)
         }
 
-        // Only buffer basic Latin / ASCII printable characters.
-        // Non-Latin keystrokes (e.g. the user switches script mid-composition) cancel the session.
         if character.isASCII && character.isLetter {
             dispatch { self.compositionController?.receive(character: character) }
             // Swallow: Latin characters never appear in the target field.
             // The overlay header shows the buffer; the app receives only the committed script text.
+            return nil
+        }
+
+        // If we are currently composing and type a non-letter (punctuation, numbers, special characters),
+        // we automatically commit the active composition and append this typed character.
+        if let controller = compositionController, !controller.session.isEmpty {
+            let suffix = String(character)
+            dispatch {
+                controller.commitSelected(appending: suffix)
+            }
+            // Swallow the event because the custom character is appended inside commitSelected() and injected.
             return nil
         }
 
