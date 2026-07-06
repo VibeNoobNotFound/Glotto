@@ -1,0 +1,2 @@
+# Glotto
+Singlish Autocomplete
