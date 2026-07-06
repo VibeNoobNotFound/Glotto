@@ -32,10 +32,13 @@ enum ProviderRegistry {
             icon: "globe",
             makeProvider: { GoogleTransliterationProvider() }
         ),
-        // ───── future providers below ─────
-        // ProviderEntry(id: "offline.rules", displayName: "Built-in (Offline)",
-        //               subtitle: "Local rule-based engine, no internet required.",
-        //               icon: "internaldrive", makeProvider: { OfflineRuleProvider() }),
+        ProviderEntry(
+            id: "local.rules",
+            displayName: "Sinhala (Local Rules)",
+            subtitle: "Offline — rule-based phonetic transliteration.",
+            icon: "keyboard",
+            makeProvider: { LocalRuleTransliterationProvider() }
+        )
     ]
 
     // MARK: - Helpers

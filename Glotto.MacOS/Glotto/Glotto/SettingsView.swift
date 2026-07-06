@@ -1,5 +1,6 @@
 import SwiftUI
 import KeyboardShortcuts
+import UniformTypeIdentifiers
 
 // MARK: - Shortcut name extension
 
@@ -20,6 +21,7 @@ struct SettingsView: View {
 
     /// Live-ordered entries derived from `providerOrderRaw`; mutated by drag-to-reorder.
     @State private var displayedProviders: [ProviderEntry] = []
+    @State private var draggedEntry: ProviderEntry?
 
     private let profiles     = LanguageProfile.builtIn
     private let soundOptions = ["None", "Tink", "Blow", "Pop", "Submarine", "Glass", "Bottle", "Funk", "Ping", "Hero"]
@@ -50,16 +52,39 @@ struct SettingsView: View {
 
             // MARK: Providers
             Section("Transliteration Providers") {
-                Text("Drag to reorder priority. Each provider is tried in order; the first with results is used.")
+                Text("Drag rows by their handles or use arrow buttons to prioritize transliteration engines.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 ForEach(Array(displayedProviders.enumerated()), id: \.element.id) { index, entry in
                     HStack(spacing: 10) {
-                        // Drag handle — visual cue for reorderability
+                        // Up / Down click fallbacks for accessibility and ease of use on macOS
+                        VStack(spacing: 1) {
+                            Button(action: { moveUp(index) }) {
+                                Image(systemName: "chevron.up")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(index == 0 ? Color.secondary.opacity(0.2) : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(index == 0)
+
+                            Button(action: { moveDown(index) }) {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(index == displayedProviders.count - 1 ? Color.secondary.opacity(0.2) : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(index == displayedProviders.count - 1)
+                        }
+                        .frame(width: 14)
+
+                        // Drag handle
                         Image(systemName: "line.3.horizontal")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.tertiary)
+                            .onHover { hovering in
+                                if hovering { NSCursor.closedHand.push() } else { NSCursor.pop() }
+                            }
 
                         Image(systemName: entry.icon)
                             .font(.system(size: 15))
@@ -84,10 +109,17 @@ struct SettingsView: View {
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
                     }
                     .padding(.vertical, 3)
-                }
-                .onMove { from, to in
-                    displayedProviders.move(fromOffsets: from, toOffset: to)
-                    providerOrderRaw = displayedProviders.map(\.id).joined(separator: ",")
+                    .background(Color.clear) // Helps drop targets identify clicks
+                    .onDrag {
+                        self.draggedEntry = entry
+                        return NSItemProvider(object: entry.id as NSString)
+                    }
+                    .onDrop(of: [.text], delegate: ProviderDropDelegate(
+                        item: entry,
+                        draggedItem: $draggedEntry,
+                        list: $displayedProviders,
+                        rawOrder: $providerOrderRaw
+                    ))
                 }
             }
 
@@ -191,6 +223,50 @@ struct SettingsView: View {
     private func previewSound(_ name: String) {
         guard name != "None" else { return }
         NSSound(named: NSSound.Name(name))?.play()
+    }
+
+    private func moveUp(_ index: Int) {
+        guard index > 0 else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            displayedProviders.swapAt(index, index - 1)
+        }
+        providerOrderRaw = displayedProviders.map(\.id).joined(separator: ",")
+    }
+
+    private func moveDown(_ index: Int) {
+        guard index < displayedProviders.count - 1 else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            displayedProviders.swapAt(index, index + 1)
+        }
+        providerOrderRaw = displayedProviders.map(\.id).joined(separator: ",")
+    }
+}
+
+// MARK: - Drop Delegate
+
+private struct ProviderDropDelegate: DropDelegate {
+    let item: ProviderEntry
+    @Binding var draggedItem: ProviderEntry?
+    @Binding var list: [ProviderEntry]
+    @Binding var rawOrder: String
+
+    func performDrop(info: DropInfo) -> Bool {
+        self.draggedItem = nil
+        return true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedItem = draggedItem else { return }
+        if draggedItem.id != item.id {
+            guard let from = list.firstIndex(where: { $0.id == draggedItem.id }),
+                  let to = list.firstIndex(where: { $0.id == item.id })
+            else { return }
+
+            withAnimation(.easeInOut(duration: 0.15)) {
+                list.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+            }
+            rawOrder = list.map(\.id).joined(separator: ",")
+        }
     }
 }
 
