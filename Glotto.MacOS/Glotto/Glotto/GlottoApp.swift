@@ -146,12 +146,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .environmentObject(permissionManager)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.minSize = NSSize(width: 440, height: 420)
+        window.minSize = NSSize(width: 440, height: 560)
         window.title = "Glotto Settings"
         window.contentView = NSHostingView(rootView: view)
         window.center()

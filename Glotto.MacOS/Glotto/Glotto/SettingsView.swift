@@ -13,12 +13,15 @@ struct SettingsView: View {
 
     @EnvironmentObject private var permissionManager: PermissionManager
     @AppStorage("activeProfileID") private var activeProfileID: String = LanguageProfile.sinhala.id
-    @AppStorage("enableSound") private var enableSound: String = "Tink"
-    @AppStorage("disableSound") private var disableSound: String = "Blow"
+    @AppStorage("enableSound")     private var enableSound: String = "Tink"
+    @AppStorage("disableSound")    private var disableSound: String = "Blow"
+    /// Comma-separated provider IDs in priority order, persisted across launches.
+    @AppStorage("providerOrder")   private var providerOrderRaw: String = ProviderRegistry.defaultOrder
 
-    // In Phase 1 there's exactly one built-in profile. The list is already the right structure
-    // for when Phase N adds more — no UI change needed, just more items in `LanguageProfile.builtIn`.
-    private let profiles = LanguageProfile.builtIn
+    /// Live-ordered entries derived from `providerOrderRaw`; mutated by drag-to-reorder.
+    @State private var displayedProviders: [ProviderEntry] = []
+
+    private let profiles     = LanguageProfile.builtIn
     private let soundOptions = ["None", "Tink", "Blow", "Pop", "Submarine", "Glass", "Bottle", "Funk", "Ping", "Hero"]
 
     var body: some View {
@@ -43,6 +46,49 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+            }
+
+            // MARK: Providers
+            Section("Transliteration Providers") {
+                Text("Drag to reorder priority. Each provider is tried in order; the first with results is used.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                ForEach(Array(displayedProviders.enumerated()), id: \.element.id) { index, entry in
+                    HStack(spacing: 10) {
+                        // Drag handle — visual cue for reorderability
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.tertiary)
+
+                        Image(systemName: entry.icon)
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 22)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.displayName)
+                                .font(.body)
+                            Text(entry.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Text("#\(index + 1)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                    .padding(.vertical, 3)
+                }
+                .onMove { from, to in
+                    displayedProviders.move(fromOffsets: from, toOffset: to)
+                    providerOrderRaw = displayedProviders.map(\.id).joined(separator: ",")
+                }
             }
 
             // MARK: Sound Feedback
@@ -91,7 +137,18 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 440)
-        .onAppear { permissionManager.refresh() }
+        .onAppear {
+            permissionManager.refresh()
+            // Populate displayedProviders from stored order (or default if first launch).
+            displayedProviders = ProviderRegistry.orderedEntries(from: providerOrderRaw)
+        }
+        // Keep displayedProviders in sync if providerOrderRaw is changed externally.
+        .onChange(of: providerOrderRaw) { _, newValue in
+            let fresh = ProviderRegistry.orderedEntries(from: newValue)
+            if fresh.map(\.id) != displayedProviders.map(\.id) {
+                displayedProviders = fresh
+            }
+        }
     }
 
     // MARK: - Helpers
