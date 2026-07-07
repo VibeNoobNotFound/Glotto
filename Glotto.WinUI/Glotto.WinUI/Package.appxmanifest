@@ -11,7 +11,7 @@
   <Identity
     Name="NoobNotFound.Glotto.WinUI"
     Publisher="CN=NoobNotFound"
-    Version="1.0.0.0" />
+    Version="1.0.1.0" />
 
   <mp:PhoneIdentity PhoneProductId="47e7aa2e-c2c8-4ac9-a77e-86dca8505839" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
