@@ -34,8 +34,19 @@ final class CaretChangeObserver {
     // MARK: - Start / stop
 
     /// Begins observing AX notifications for the process that owns `element`.
-    /// Safe to call repeatedly; re-starting tears down any prior observer first.
+    /// Safe to call repeatedly — if we're already observing this exact element,
+    /// this is a no-op rather than tearing down and rebuilding the AXObserver.
+    ///
+    /// This matters because `CandidateOverlayController` calls this on every
+    /// `showOrUpdate`, which fires on every keystroke while composing. Without
+    /// this guard, every character typed would tear down and recreate a real
+    /// AXObserver — an XPC round-trip to the Accessibility server plus six
+    /// `AXObserverAddNotification` calls — instead of only doing that once per
+    /// composition session (or when focus genuinely moves to a new element).
     func start(observing element: AXUIElement) {
+        if axObserver != nil, let observedElement, CFEqual(observedElement, element) {
+            return
+        }
         stop()
 
         guard let pid = AccessibilityBridge.pid(of: element) else { return }
