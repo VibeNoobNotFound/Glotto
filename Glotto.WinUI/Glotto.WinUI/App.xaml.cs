@@ -101,6 +101,7 @@ namespace Glotto.WinUI
             var armed = _keyboardHookManager.IsArmed;
 
             _trayIconManager?.UpdateIconState(armed);
+            Core.SoundPlayer.PlayToggleSound(armed);
         }
 
         private void OpenSettings()
