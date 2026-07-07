@@ -29,16 +29,15 @@ final class TextInjector {
 
     // MARK: - Main entry point
 
-    /// Removes `latinCharCount` characters before the cursor, then inserts `candidate`.
-    func inject(candidate: String, deletingLatinChars latinCharCount: Int) async {
-        // Step 1: always delete via real key events. Never via AX — this is what
-        // keeps deletion and insertion from stepping on each other's state.
+    /// Removes `latinCharCount` characters before the cursor, inserts `candidate`,
+    /// then (if suffix is a space) fires a real `kVK_Space` keystroke immediately after paste.
+    /// All other suffix characters must already be concatenated into `candidate` by the caller.
+    func inject(candidate: String, deletingLatinChars latinCharCount: Int, suffix: String = "") async {
+        // Step 1: always delete via real key events.
         if latinCharCount > 0 {
             removeLatinBuffer(count: latinCharCount)
-            // Give the target app's event loop a moment to actually process the
-            // backspaces before we query/mutate its AX state. Synthetic events are
-            // posted asynchronously relative to the receiving app; without this,
-            // the verification read below can race and see stale selection state.
+            // Give the target app's event loop a moment to process the backspaces
+            // before we query/mutate its AX state.
             try? await Task.sleep(nanoseconds: 15_000_000) // 15ms
         }
 
@@ -46,19 +45,21 @@ final class TextInjector {
         if let element = AccessibilityBridge.focusedElement(),
            tryVerifiedAXInsertion(candidate: candidate, into: element) {
             print("[TextInjector] ✓ AX path verified")
+            // Fire space immediately — no clipboard restore delay to wait for.
+            if suffix == " " { postKeyEvent(keyCode: UInt16(kVK_Space), flags: []) }
             return
         }
 
-        // Step 3: universal fallback. No deleteCount here — already handled in Step 1.
+        // Step 3: clipboard paste fallback.
         print("[TextInjector] AX path unavailable/unverified — using clipboard paste")
-        if await injectViaClipboard(candidate: candidate) {
+        if await injectViaClipboard(candidate: candidate, suffix: suffix) {
             print("[TextInjector] ✓ Clipboard paste path succeeded")
             return
         }
 
-        // Step 4: last resort.
+        // Step 4: last resort synthetic keystroke — include suffix directly in the string.
         print("[TextInjector] Clipboard path failed — using synthetic Unicode keystroke")
-        injectViaKeystrokes(candidate: candidate)
+        injectViaKeystrokes(candidate + suffix)
     }
 
     // MARK: - Step 1: real backspace key events
@@ -91,10 +92,12 @@ final class TextInjector {
         return after.location == expectedLocation
     }
 
-    // MARK: - Step 3: clipboard paste (⌘V) — insertion only, no deletion
-
+    /// Clipboard paste (⌘V) — insertion only, no deletion.
+    /// If `suffix` is a space, fires `kVK_Space` immediately after the paste keystroke
+    /// (before the clipboard-restore wait) so it appears with no perceptible delay.
+    /// Word silently trims trailing whitespace from ⌘V payload; a real Space keypress bypasses that.
     @discardableResult
-    private func injectViaClipboard(candidate: String) async -> Bool {
+    private func injectViaClipboard(candidate: String, suffix: String = "") async -> Bool {
         let pasteboard = NSPasteboard.general
         let savedItems: [(types: [NSPasteboard.PasteboardType], data: [NSPasteboard.PasteboardType: Data])] =
             (pasteboard.pasteboardItems ?? []).map { item in
@@ -108,6 +111,12 @@ final class TextInjector {
         pasteboard.setString(candidate, forType: .string)
 
         postKeyEvent(keyCode: UInt16(kVK_ANSI_V), flags: .maskCommand)
+
+        // Fire space immediately after ⌘V — before the clipboard-restore wait.
+        // This avoids the 400ms delay that would occur if we fired it after the sleep.
+        if suffix == " " {
+            postKeyEvent(keyCode: UInt16(kVK_Space), flags: [])
+        }
 
         // Restore the original clipboard after enough time for the app to consume the paste.
         try? await Task.sleep(nanoseconds: 400_000_000) // 400ms
@@ -126,8 +135,8 @@ final class TextInjector {
 
     // MARK: - Step 4: synthetic Unicode CGEvent (last resort)
 
-    private func injectViaKeystrokes(candidate: String) {
-        let scalars = Array(candidate.utf16)
+    private func injectViaKeystrokes(_ text: String) {
+        let scalars = Array(text.utf16)
         guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true) else { return }
 
         scalars.withUnsafeBufferPointer { buf in

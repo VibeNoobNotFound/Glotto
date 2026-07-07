@@ -171,13 +171,25 @@ final class CompositionController: ObservableObject {
         session.reset()
         overlayController.hide()
 
-        // Append the custom suffix (e.g., space, punctuation, or empty string)
-        let textToInject = candidate.text + suffix
+        let textToInject = candidate.text
+        // Space is the only suffix fired as a separate kVK_Space keystroke (Word trims trailing
+        // whitespace from ⌘V content). All other suffix chars are safe to include in the paste
+        // payload and should go through as one ⌘V to avoid any extra round-trips.
+        let trailingSuffix: String
+        if suffix == " " {
+            trailingSuffix = " "
+        } else {
+            // Non-space suffix: append directly to paste payload, pass empty suffix to inject().
+            // textToInject is reassigned below — we can't mutate a let inside a guard, so we
+            // build the final string here and pass no suffix.
+            trailingSuffix = ""
+        }
+        let finalText = suffix == " " ? textToInject : textToInject + suffix
 
         // Small delay so the overlay fade-out finishes before injection fires.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 50_000_000) // 50 ms
-            await textInjector.inject(candidate: textToInject, deletingLatinChars: latinCount)
+            await textInjector.inject(candidate: finalText, deletingLatinChars: latinCount, suffix: trailingSuffix)
         }
     }
 
