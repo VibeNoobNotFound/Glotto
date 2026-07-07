@@ -1,5 +1,8 @@
 import AppKit
 import Carbon.HIToolbox
+import os.log
+
+private let logger = Logger(subsystem: "dev.noobnotfound.glotto", category: "EventTapManager")
 
 /// Owns the CGEventTap that intercepts keystrokes system-wide while composition mode is armed.
 ///
@@ -23,11 +26,11 @@ final class EventTapManager {
     func arm() {
         guard !isArmed else { return }
         guard installTap() else {
-            print("[EventTapManager] Failed to install CGEventTap — Accessibility/Input Monitoring missing?")
+            logger.error("Failed to install CGEventTap — Accessibility/Input Monitoring missing?")
             return
         }
         isArmed = true
-        print("[EventTapManager] Armed ✓")
+        logger.info("Armed")
     }
 
     func disarm() {
@@ -35,7 +38,7 @@ final class EventTapManager {
         removeTap()
         compositionController?.cancelComposition()
         isArmed = false
-        print("[EventTapManager] Disarmed")
+        logger.info("Disarmed")
     }
 
     func toggle() {
@@ -93,6 +96,16 @@ final class EventTapManager {
             return Unmanaged.passUnretained(event)
         }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+
+        // Respect AppCompatibility overrides: never intercept keystrokes for apps
+        // where composition is explicitly disabled (password managers, secure
+        // system prompts) — pass every event straight through untouched.
+        if AppCompatibility.quirksForFrontmostApp().disableComposition {
+            if let controller = compositionController, !controller.session.isEmpty {
+                dispatch { controller.cancelComposition() }
+            }
+            return Unmanaged.passUnretained(event)
+        }
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags   = event.flags
@@ -166,6 +179,20 @@ final class EventTapManager {
             return nil
         }
 
+        // Control characters (Tab, and anything else that isn't actually printable
+        // text) are NOT punctuation to auto-commit-and-inject. `keyboardGetUnicodeString`
+        // happily returns a scalar for Tab (0x09) since it *is* a real Unicode
+        // character — but auto-committing and pasting a literal tab is wrong; the
+        // user pressed Tab to move focus to the next field, same intent as the
+        // arrow-key case above. Treat it the same way: cancel cleanly and let the
+        // real key through so the target app still sees a normal Tab press.
+        guard isPrintable(character) else {
+            if let controller = compositionController, !controller.session.isEmpty {
+                dispatch { controller.cancelComposition() }
+            }
+            return Unmanaged.passUnretained(event)
+        }
+
         // If we are currently composing and type a non-letter (punctuation, numbers, special characters),
         // we automatically commit the active composition and append this typed character.
         if let controller = compositionController, !controller.session.isEmpty {
@@ -178,6 +205,19 @@ final class EventTapManager {
         }
 
         return Unmanaged.passUnretained(event)
+    }
+
+    /// True for ordinary printable text — punctuation, digits, symbols, letters.
+    /// False for control characters (Tab, other C0/C1 controls, DEL) that happen
+    /// to decode to a Unicode scalar via `keyboardGetUnicodeString` but were
+    /// never meant to be typed as literal text.
+    private func isPrintable(_ character: Character) -> Bool {
+        guard let ascii = character.asciiValue else {
+            // Non-ASCII scalar (accented letters, symbols from other layouts, etc.)
+            // — these are real text, not control characters.
+            return true
+        }
+        return ascii >= 0x20 && ascii != 0x7F
     }
 
     // MARK: - Helpers

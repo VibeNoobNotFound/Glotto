@@ -1,6 +1,9 @@
 import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
+import os.log
+
+private let logger = Logger(subsystem: "dev.noobnotfound.glotto", category: "TextInjector")
 
 /// Commits a transliterated candidate into the focused text field.
 ///
@@ -30,8 +33,20 @@ final class TextInjector {
     // MARK: - Main entry point
 
     /// Removes `latinCharCount` characters before the cursor, inserts `candidate`,
-    /// then (if suffix is a space) fires a real `kVK_Space` keystroke immediately after paste.
-    /// All other suffix characters must already be concatenated into `candidate` by the caller.
+    /// then appends `suffix`. By default `suffix` is embedded directly in the same
+    /// insertion (one atomic AX-set or one ⌘V payload) — the only exception is a
+    /// space suffix in an app registered with `pasteTrimsTrailingWhitespace`
+    /// (Word), which needs a real, separate `kVK_Space` keystroke to survive.
+    ///
+    /// Embedding is the default, not the exception, because firing a *second*,
+    /// independent synthetic keystroke immediately after an AX-set/paste races
+    /// the target's own handling of that first mutation. This is reliably
+    /// reproducible in Safari (and other React-controlled web fields): typing
+    /// candidate+space in quick succession can land the follow-up Space keydown
+    /// before the browser has actually committed the pasted text to the field's
+    /// value, so the two edits interleave instead of applying in order and the
+    /// trailing space silently disappears. Embedding sidesteps the race entirely
+    /// since there's nothing left to reorder.
     func inject(candidate: String, deletingLatinChars latinCharCount: Int, suffix: String = "") async {
         // Step 1: always delete via real key events.
         if latinCharCount > 0 {
@@ -41,25 +56,30 @@ final class TextInjector {
             try? await Task.sleep(nanoseconds: 15_000_000) // 15ms
         }
 
+        let quirks = AppCompatibility.quirksForFrontmostApp()
+        let mustSendSpaceAsKeystroke = suffix == " " && quirks.pasteTrimsTrailingWhitespace
+        let textToInsert = mustSendSpaceAsKeystroke ? candidate : candidate + suffix
+        let keystrokeSuffix = mustSendSpaceAsKeystroke ? suffix : ""
+
         // Step 2: AX fast path, with verification — only attempted, never trusted blindly.
         if let element = AccessibilityBridge.focusedElement(),
-           tryVerifiedAXInsertion(candidate: candidate, into: element) {
-            print("[TextInjector] ✓ AX path verified")
+           tryVerifiedAXInsertion(candidate: textToInsert, into: element) {
+            logger.debug("AX path verified")
             // Fire space immediately — no clipboard restore delay to wait for.
-            if suffix == " " { postKeyEvent(keyCode: UInt16(kVK_Space), flags: []) }
+            if !keystrokeSuffix.isEmpty { postKeyEvent(keyCode: UInt16(kVK_Space), flags: []) }
             return
         }
 
         // Step 3: clipboard paste fallback.
-        print("[TextInjector] AX path unavailable/unverified — using clipboard paste")
-        if await injectViaClipboard(candidate: candidate, suffix: suffix) {
-            print("[TextInjector] ✓ Clipboard paste path succeeded")
+        logger.debug("AX path unavailable/unverified — using clipboard paste")
+        if await injectViaClipboard(candidate: textToInsert, suffix: keystrokeSuffix) {
+            logger.debug("Clipboard paste path succeeded")
             return
         }
 
         // Step 4: last resort synthetic keystroke — include suffix directly in the string.
-        print("[TextInjector] Clipboard path failed — using synthetic Unicode keystroke")
-        injectViaKeystrokes(candidate + suffix)
+        logger.debug("Clipboard path failed — using synthetic Unicode keystroke")
+        injectViaKeystrokes(textToInsert + keystrokeSuffix)
     }
 
     // MARK: - Step 1: real backspace key events
@@ -109,6 +129,11 @@ final class TextInjector {
 
         pasteboard.clearContents()
         pasteboard.setString(candidate, forType: .string)
+        // Snapshot the change count right after our own write — if it differs when
+        // the restore timer fires, something else (the user copying elsewhere,
+        // another app) wrote to the pasteboard in the meantime, and restoring our
+        // saved snapshot would silently clobber that newer content.
+        let changeCountAfterOurWrite = pasteboard.changeCount
 
         postKeyEvent(keyCode: UInt16(kVK_ANSI_V), flags: .maskCommand)
 
@@ -120,6 +145,12 @@ final class TextInjector {
 
         // Restore the original clipboard after enough time for the app to consume the paste.
         try? await Task.sleep(nanoseconds: 400_000_000) // 400ms
+
+        guard pasteboard.changeCount == changeCountAfterOurWrite else {
+            logger.debug("Clipboard changed during paste window — skipping restore to avoid clobbering newer content")
+            return true
+        }
+
         pasteboard.clearContents()
         for item in savedItems {
             let newItem = NSPasteboardItem()
@@ -148,7 +179,7 @@ final class TextInjector {
             keyUp.post(tap: .cghidEventTap)
         }
 
-        print("[TextInjector] ✓ Synthetic keystroke path")
+        logger.debug("Synthetic keystroke path")
     }
 
     // MARK: - Helpers

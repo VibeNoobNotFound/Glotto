@@ -182,25 +182,19 @@ final class CompositionController: ObservableObject {
         session.reset()
         overlayController.hide()
 
+        // Whether `suffix` gets embedded in the same insertion or fired as a
+        // separate real keystroke is TextInjector's call, not ours — it depends
+        // on the frontmost app's quirks (see AppCompatibility.pasteTrimsTrailingWhitespace),
+        // which TextInjector already looks up right before it touches AX/clipboard.
+        // Deciding it here as well used to hardcode "space is always a separate
+        // keystroke" for every app, which raced Safari's (and other web fields')
+        // own paste handling and could silently drop the space.
         let textToInject = candidate.text
-        // Space is the only suffix fired as a separate kVK_Space keystroke (Word trims trailing
-        // whitespace from ⌘V content). All other suffix chars are safe to include in the paste
-        // payload and should go through as one ⌘V to avoid any extra round-trips.
-        let trailingSuffix: String
-        if suffix == " " {
-            trailingSuffix = " "
-        } else {
-            // Non-space suffix: append directly to paste payload, pass empty suffix to inject().
-            // textToInject is reassigned below — we can't mutate a let inside a guard, so we
-            // build the final string here and pass no suffix.
-            trailingSuffix = ""
-        }
-        let finalText = suffix == " " ? textToInject : textToInject + suffix
 
         // Small delay so the overlay fade-out finishes before injection fires.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 50_000_000) // 50 ms
-            await textInjector.inject(candidate: finalText, deletingLatinChars: latinCount, suffix: trailingSuffix)
+            await textInjector.inject(candidate: textToInject, deletingLatinChars: latinCount, suffix: suffix)
         }
     }
 
@@ -231,8 +225,14 @@ final class CompositionController: ObservableObject {
             let profile = await self.session.profile
             guard !text.isEmpty else { return }
 
-            await MainActor.run { self.session.isLoading = true }
-            self.overlayController.update(session: await self.session)
+            await MainActor.run {
+                self.session.isLoading = true
+                // Reposition here too: the loading placeholder can differ in
+                // height from whatever was previously shown (e.g. first
+                // keystroke after a resize), and previously this call skipped
+                // reposition entirely, only fixed up on the *next* keystroke.
+                self.overlayController.update(session: self.session, reposition: true)
+            }
 
             let results = await self.service.candidates(for: text, profile: profile)
 
@@ -251,7 +251,12 @@ final class CompositionController: ObservableObject {
                 self.session.selectionIndex = 0
                 self.session.lookupFailed = results.isEmpty
                 
+                // The panel's height almost always changes here (loading
+                // placeholder -> real candidate list), so this is the update
+                // that most needs a reposition — previously this only happened
+                // implicitly on the next keystroke via updateOverlay/showOrUpdate.
                 self.updateOverlay()
+                self.overlayController.reposition()
             }
         }
     }

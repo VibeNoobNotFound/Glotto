@@ -61,6 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         registerHotkey()
 
+        // Cheap, permission-free anchor used as a fallback when AX-based caret
+        // resolution fails or is unreliable for a given app (e.g. Pages'
+        // canvas-based text engine). Safe to run for the whole app lifetime.
+        Task { @MainActor in MouseClickTracker.shared.start() }
+
         // Show onboarding if either permission is missing.
         permissionManager.refresh()
         if !permissionManager.allGranted {
