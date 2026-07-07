@@ -72,21 +72,9 @@ public sealed class CandidateOverlayController
         if (!_isPresented) return;
         _isPresented = false;
 
-        var capturedSession = _lastSession;
         _dispatcherQueue.TryEnqueue(() =>
         {
-            _window?.UpdateSession(capturedSession, isPresented: false);
-
-            // Delay-hide after animation completes
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(200);
-                _dispatcherQueue.TryEnqueue(() =>
-                {
-                    if (!_isPresented)
-                        _window?.HideWindow();
-                });
-            });
+            _window?.HideWindow();
         });
     }
 

@@ -122,24 +122,46 @@ public sealed partial class CandidateOverlayWindow : Microsoft.UI.Xaml.Window
 
     // MARK: - Show / hide without activating
 
+    private bool _isHiding = false;
+
     public void ShowNonActivating()
     {
+        _isHiding = false;
+        HideStoryboard.Stop();
+
         SetWindowPos(
             _hwnd,
             HWND_TOPMOST,
             0, 0, 0, 0,     // position and size set separately via MoveAndResize
             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE
         );
+
+        ShowStoryboard.Begin();
     }
 
     public void HideWindow()
     {
-        SetWindowPos(
-            _hwnd,
-            HWND_TOPMOST,
-            0, 0, 0, 0,
-            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | 0x0080 /* SWP_HIDEWINDOW */
-        );
+        if (_isHiding) return;
+        _isHiding = true;
+        ShowStoryboard.Stop();
+
+        void OnCompleted(object? sender, object e)
+        {
+            HideStoryboard.Completed -= OnCompleted;
+            if (_isHiding)
+            {
+                SetWindowPos(
+                    _hwnd,
+                    HWND_TOPMOST,
+                    0, 0, 0, 0,
+                    SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | 0x0080 /* SWP_HIDEWINDOW */
+                );
+            }
+            _isHiding = false;
+        }
+
+        HideStoryboard.Completed += OnCompleted;
+        HideStoryboard.Begin();
     }
 
     public IntPtr GetHwnd() => _hwnd;
@@ -314,6 +336,19 @@ public sealed partial class CandidateOverlayWindow : Microsoft.UI.Xaml.Window
                     Microsoft.UI.ColorHelper.FromArgb(38, 0, 120, 212))  // accent ~15% opacity
                 : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
             Child = grid
+        };
+
+        // Pointer hover: subtle background highlight like macOS
+        // (ProtectedCursor requires subclassing Border which is sealed — skipped)
+        rowBorder.PointerEntered += (s, e) =>
+        {
+            if (!isSelected)
+                rowBorder.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ControlFillColorSecondaryBrush"];
+        };
+        rowBorder.PointerExited += (s, e) =>
+        {
+            if (!isSelected)
+                rowBorder.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
         };
 
         return rowBorder;
