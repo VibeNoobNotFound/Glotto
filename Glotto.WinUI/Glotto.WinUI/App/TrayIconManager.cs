@@ -18,7 +18,6 @@ using System.Windows.Input;
 using H.NotifyIcon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Glotto.WinUI.Tray;
 
@@ -65,18 +64,18 @@ public sealed class TrayIconManager : IDisposable
             ? "Glotto - Armed (type phonetically)"
             : "Glotto - Idle (right-click for menu, double-click to arm)";
 
-        var uriString = armed
-            ? "ms-appx:///Assets/Square44x44Logo.scale-200.png"
-            : "ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png";
-
-        try
+        // GeneratedIconSource renders reliably without needing a .ico file.
+        // Blue = idle, Green = armed — matches the macOS Glotto convention.
+        _taskbarIcon.IconSource = new GeneratedIconSource
         {
-            _taskbarIcon.IconSource = new BitmapImage(new Uri(uriString));
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[TrayIconManager] Error updating icon source: {ex.Message}");
-        }
+            Text = "\uF1D4",
+            Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                armed
+                    ? Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x10, 0x7C, 0x10)   // green
+                    : Microsoft.UI.ColorHelper.FromArgb(0xFF, 0xFF, 0xFF, 0xFF)), // white
+            FontFamily = new("Segoe Fluent Icons"),
+            Margin = new Thickness(16, 16, 0, 0)
+        };
     }
 
     // MARK: - Helpers
