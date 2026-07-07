@@ -96,6 +96,17 @@ final class CompositionController: ObservableObject {
         }
     }
 
+    // MARK: - Profile switching
+
+    /// Switches the active language profile (e.g. when the user picks a different profile in
+    /// Settings). Any in-progress composition is cancelled first — its candidates were computed
+    /// for the old profile and would otherwise be silently wrong for the new one.
+    func setProfile(_ profile: LanguageProfile) {
+        guard profile.id != session.profile.id else { return }
+        cancelComposition()
+        session.profile = profile
+    }
+
     // MARK: - Keystroke handling (called from EventTapManager)
 
     /// Called by EventTapManager for each printable Latin character captured while armed.

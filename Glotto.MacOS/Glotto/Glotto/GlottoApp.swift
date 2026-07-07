@@ -46,6 +46,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindow: NSWindow?
     private var settingsWindow: NSWindow?
 
+    /// Tracks the last profile id we applied, so the blanket `UserDefaults.didChangeNotification`
+    /// (which fires for *any* default changing, not just `activeProfileID`) doesn't cause
+    /// redundant profile switches — and, more importantly, doesn't cancel an in-progress
+    /// composition just because an unrelated setting (like a sound picker) changed.
+    private var lastAppliedProfileID: String?
+
     // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -66,6 +72,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(activeAppChanged),
             name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
+
+        // Apply whatever profile was last selected in Settings (or the default) up front,
+        // then keep listening — see `applyActiveProfileFromDefaults()` below for why this is
+        // needed at all.
+        applyActiveProfileFromDefaults()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(userDefaultsChanged),
+            name: UserDefaults.didChangeNotification,
             object: nil
         )
     }
@@ -219,6 +236,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         onboardingWindow = window
+    }
+
+//                  HIRUJA EDURAPOLA - 07/07/2026
+
+    // MARK: - Language profile sync
+
+    /// SettingsView's "Active Profile" picker writes to `@AppStorage("activeProfileID")`, but
+    /// CompositionController was only ever constructed once with the hardcoded `.sinhala`
+    /// default — nothing ever read that stored value back out. The picker looked functional
+    /// but silently did nothing. This reads the current value and applies it to the live
+    /// controller; `userDefaultsChanged` keeps it in sync afterwards.
+    private func applyActiveProfileFromDefaults() {
+        let storedID = UserDefaults.standard.string(forKey: "activeProfileID") ?? LanguageProfile.sinhala.id
+        guard storedID != lastAppliedProfileID else { return }
+        guard let profile = LanguageProfile.builtIn.first(where: { $0.id == storedID }) else { return }
+        lastAppliedProfileID = storedID
+        compositionController.setProfile(profile)
+    }
+
+    @objc private func userDefaultsChanged(_ notification: Notification) {
+        Task { @MainActor in
+            self.applyActiveProfileFromDefaults()
+        }
     }
 
     // MARK: - Focus change
