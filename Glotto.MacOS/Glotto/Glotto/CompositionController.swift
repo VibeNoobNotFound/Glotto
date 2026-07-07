@@ -200,7 +200,8 @@ final class CompositionController: ObservableObject {
         lookupTask?.cancel()
         lookupTask = Task { [weak self] in
             // Wait for the debounce window.
-            try? await Task.sleep(nanoseconds: UInt64(self?.debounceInterval ?? 0.13 * 1_000_000_000))
+            let interval = self?.debounceInterval ?? 0.13
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }
 
             let text = await self.session.buffer
