@@ -131,12 +131,12 @@ final class EventTapManager {
                 // Swallow: the buffer pop is all that's needed; nothing is in the text field.
                 return nil
 
-            // Number keys 1–5 for direct candidate selection
-            case kVK_ANSI_1: dispatch { controller.handleSpecialKey(.numberSelect(1)) }; return nil
-            case kVK_ANSI_2: dispatch { controller.handleSpecialKey(.numberSelect(2)) }; return nil
-            case kVK_ANSI_3: dispatch { controller.handleSpecialKey(.numberSelect(3)) }; return nil
-            case kVK_ANSI_4: dispatch { controller.handleSpecialKey(.numberSelect(4)) }; return nil
-            case kVK_ANSI_5: dispatch { controller.handleSpecialKey(.numberSelect(5)) }; return nil
+            // Number keys 1–5 for direct candidate selection (only when Shift is not pressed)
+            case kVK_ANSI_1 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(1)) }; return nil
+            case kVK_ANSI_2 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(2)) }; return nil
+            case kVK_ANSI_3 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(3)) }; return nil
+            case kVK_ANSI_4 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(4)) }; return nil
+            case kVK_ANSI_5 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(5)) }; return nil
 
             default:
                 break
