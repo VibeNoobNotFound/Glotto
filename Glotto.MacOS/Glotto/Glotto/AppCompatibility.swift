@@ -20,6 +20,16 @@ enum AppCompatibility {
         /// (e.g. system password fields, Terminal in some configurations where
         /// injected paste could clobber a shell command usage).
         var disableComposition: Bool = false
+
+        /// If true, this app is known to trim trailing whitespace from
+        /// programmatically-set/pasted text, so a trailing space suffix must be
+        /// fired as a separate, real `kVK_Space` keystroke rather than embedded
+        /// directly in the inserted string. This is the *exception*, not the
+        /// default: embedding the suffix in the same set/paste operation is
+        /// strictly safer everywhere else, since it avoids racing a second,
+        /// independent synthetic keystroke against the target's own (often
+        /// async) handling of the first mutation — see `TextInjector`.
+        var pasteTrimsTrailingWhitespace: Bool = false
     }
 
     /// Known bundle IDs with special handling. Chromium/Electron-based apps
@@ -38,6 +48,10 @@ enum AppCompatibility {
         "com.agilebits.onepassword7": Quirks(disableComposition: true),
         "com.1password.1password": Quirks(disableComposition: true),
         "com.apple.SecurityAgent": Quirks(disableComposition: true),
+
+        // Word trims trailing whitespace from ⌘V/AX-set payloads, so it needs
+        // the trailing space fired as a real, separate keystroke instead.
+        "com.microsoft.Word": Quirks(pasteTrimsTrailingWhitespace: true),
     ]
 
     /// Returns quirks for the frontmost application, or default (empty) quirks
