@@ -9,15 +9,15 @@
   IgnorableNamespaces="uap rescap systemai">
 
   <Identity
-    Name="47e7aa2e-c2c8-4ac9-a77e-86dca8505839"
-    Publisher="CN=chani"
+    Name="NoobNotFound.Glotto.WinUI"
+    Publisher="CN=NoobNotFound"
     Version="1.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="47e7aa2e-c2c8-4ac9-a77e-86dca8505839" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>Glotto.WinUI</DisplayName>
-    <PublisherDisplayName>chani</PublisherDisplayName>
+    <DisplayName>Glotto</DisplayName>
+    <PublisherDisplayName>NoobNotFound</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
