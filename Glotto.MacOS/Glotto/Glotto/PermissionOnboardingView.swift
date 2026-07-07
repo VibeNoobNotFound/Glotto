@@ -53,7 +53,7 @@ struct PermissionOnboardingView: View {
                         Text("Already checked in Settings?")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.primary)
-                        Text("macOS invalidates permissions when local app binaries are rebuilt. If Glotto is already listed, toggle the checkbox off and back on in System Settings to re-authorize it.")
+                        Text("macOS invalidates permissions when local app binaries are rebuilt. If Glotto is already listed, remove Glotto and add it and enable it and back on in System Settings to re-authorize it.")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .lineSpacing(2)
@@ -72,6 +72,7 @@ struct PermissionOnboardingView: View {
             // Status footer
             footer
         }
+        .background(.ultraThinMaterial) 
         .frame(width: 480)
         .onAppear {
             permissionManager.refresh()
@@ -186,15 +187,10 @@ private struct PermissionCard: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-        )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(granted ? Color.green.opacity(0.4) : Color.primary.opacity(0.08), lineWidth: 1)
-        )
+        ).glassEffect(in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var statusBadge: some View {
