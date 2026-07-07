@@ -12,6 +12,7 @@
 // The candidate panel must NEVER take keyboard focus; the hook intercepts keys globally.
 
 using Glotto.WinUI.Core;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using WinRT.Interop;
@@ -28,6 +29,8 @@ public sealed partial class CandidateOverlayWindow : Microsoft.UI.Xaml.Window
     private IntPtr _hwnd;
     private AppWindow? _appWindow;
     private OverlappedPresenter? _presenter;
+    private DesktopAcrylicController? _acrylicController;
+    private SystemBackdropConfiguration? _backdropConfig;
 
     /// <summary>Raised when the user clicks a candidate row. Argument is the candidate index.</summary>
     public event EventHandler<int>? CandidateClicked;
@@ -53,10 +56,44 @@ public sealed partial class CandidateOverlayWindow : Microsoft.UI.Xaml.Window
         // Apply non-activating window styles
         ApplyNonActivatingStyle();
 
-        // Make the window background transparent
         if (_appWindow is not null)
         {
             _appWindow.IsShownInSwitchers = false;
+        }
+
+        // Setup acrylic backdrop once XAML visual tree is ready.
+        // DesktopAcrylicController is used instead of Window.SystemBackdrop so we can
+        // force IsInputActive=true permanently — this makes acrylic render even though
+        // this window is WS_EX_NOACTIVATE and never receives WM_ACTIVATE.
+        RootBorder.Loaded += (s, e) => SetupAcrylic();
+    }
+
+    private void SetupAcrylic()
+    {
+        try
+        {
+            _backdropConfig = new SystemBackdropConfiguration
+            {
+                IsInputActive = true,   // Force "active" acrylic even on non-activating windows
+                Theme = SystemBackdropTheme.Dark
+            };
+
+            _acrylicController = new DesktopAcrylicController
+            {
+                TintColor = Windows.UI.Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A),
+                TintOpacity = 0.75f,
+                LuminosityOpacity = 0.0f,
+                FallbackColor = Windows.UI.Color.FromArgb(0xE6, 0x20, 0x20, 0x20),
+                Kind = DesktopAcrylicKind.Base
+            };
+
+            _acrylicController.AddSystemBackdropTarget(
+                WinRT.CastExtensions.As<Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop>(this));
+            _acrylicController.SetSystemBackdropConfiguration(_backdropConfig);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[CandidateOverlayWindow] Acrylic setup failed: {ex.Message}");
         }
     }
 
@@ -64,34 +101,67 @@ public sealed partial class CandidateOverlayWindow : Microsoft.UI.Xaml.Window
 
     private void ApplyNonActivatingStyle()
     {
+        // Set standard style to borderless WS_POPUP to strip native frames
+        var style = WS_POPUP;
+        SetWindowLongPtr(_hwnd, GWL_STYLE, (IntPtr)style);
+
         var exStyle = (uint)GetWindowLongPtr(_hwnd, GWL_EXSTYLE).ToInt64();
 
         // Remove WS_EX_APPWINDOW (prevents appearing in taskbar/alt-tab)
-        // Add WS_EX_NOACTIVATE (prevents focus grab) and WS_EX_TOOLWINDOW
-        exStyle = (exStyle & ~WS_EX_APPWINDOW) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        // Add WS_EX_NOACTIVATE (prevents focus grab), WS_EX_TOOLWINDOW, and WS_EX_LAYERED (0x00080000) for transparency
+        exStyle = (exStyle & ~WS_EX_APPWINDOW) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | 0x00080000;
         SetWindowLongPtr(_hwnd, GWL_EXSTYLE, (IntPtr)exStyle);
+
+        // Dispose acrylic controller when the window is closed
+        this.Closed += (_, _) =>
+        {
+            _acrylicController?.Dispose();
+            _acrylicController = null;
+        };
     }
 
     // MARK: - Show / hide without activating
 
+    private bool _isHiding = false;
+
     public void ShowNonActivating()
     {
+        _isHiding = false;
+        HideStoryboard.Stop();
+
         SetWindowPos(
             _hwnd,
             HWND_TOPMOST,
             0, 0, 0, 0,     // position and size set separately via MoveAndResize
             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE
         );
+
+        ShowStoryboard.Begin();
     }
 
     public void HideWindow()
     {
-        SetWindowPos(
-            _hwnd,
-            HWND_TOPMOST,
-            0, 0, 0, 0,
-            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | 0x0080 /* SWP_HIDEWINDOW */
-        );
+        if (_isHiding) return;
+        _isHiding = true;
+        ShowStoryboard.Stop();
+
+        void OnCompleted(object? sender, object e)
+        {
+            HideStoryboard.Completed -= OnCompleted;
+            if (_isHiding)
+            {
+                SetWindowPos(
+                    _hwnd,
+                    HWND_TOPMOST,
+                    0, 0, 0, 0,
+                    SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | 0x0080 /* SWP_HIDEWINDOW */
+                );
+            }
+            _isHiding = false;
+        }
+
+        HideStoryboard.Completed += OnCompleted;
+        HideStoryboard.Begin();
     }
 
     public IntPtr GetHwnd() => _hwnd;
@@ -266,6 +336,19 @@ public sealed partial class CandidateOverlayWindow : Microsoft.UI.Xaml.Window
                     Microsoft.UI.ColorHelper.FromArgb(38, 0, 120, 212))  // accent ~15% opacity
                 : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
             Child = grid
+        };
+
+        // Pointer hover: subtle background highlight like macOS
+        // (ProtectedCursor requires subclassing Border which is sealed — skipped)
+        rowBorder.PointerEntered += (s, e) =>
+        {
+            if (!isSelected)
+                rowBorder.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ControlFillColorSecondaryBrush"];
+        };
+        rowBorder.PointerExited += (s, e) =>
+        {
+            if (!isSelected)
+                rowBorder.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
         };
 
         return rowBorder;

@@ -23,15 +23,19 @@
                 MenuActivation="RightClick"
                 ContextMenuMode="PopupMenu">
 
+                <!-- GeneratedIconSource renders an emoji/text into the 32x32 tray icon slot.
+                     This works without any .ico file and is always visible in the system tray. -->
                 <tb:TaskbarIcon.IconSource>
                     <tb:GeneratedIconSource
-                        Text="⭕"
-                        FontFamily="Segoe UI Emoji"
-                        FontSize="48" />
+                        Text=" G"
+                        Foreground="White"
+                        Background="#FF0078D4"
+                        FontSize="28"
+                        FontWeight="Bold" />
                 </tb:TaskbarIcon.IconSource>
 
                 <tb:TaskbarIcon.ContextFlyout>
-                    <MenuFlyout>
+                    <MenuFlyout AreOpenCloseAnimationsEnabled="False">
                         <MenuFlyoutItem x:Name="ToggleItem" Text="Toggle Composition Mode" />
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem x:Name="SettingsItem" Text="Settings…" />

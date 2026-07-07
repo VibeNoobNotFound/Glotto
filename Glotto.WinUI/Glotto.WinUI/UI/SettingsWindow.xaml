@@ -6,6 +6,7 @@
     xmlns:local="using:Glotto.WinUI.UI"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="using:CommunityToolkit.WinUI.Controls"
     mc:Ignorable="d"
     Title="Glotto Settings">
 
@@ -13,165 +14,196 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24">
-        <StackPanel Spacing="24" MaxWidth="500" HorizontalAlignment="Left">
-            
-            <!-- Global Shortcut Section -->
-            <StackPanel Spacing="8">
-                <TextBlock Text="Global Shortcut" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
-                        BorderThickness="1" 
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                        CornerRadius="8" 
-                        Padding="16">
-                    <Grid RowSpacing="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        
-                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                            <TextBlock Text="Toggle Glotto" FontWeight="SemiBold" />
-                            <TextBlock Text="Press this shortcut in any app to arm or disarm transliteration mode." 
-                                       Style="{ThemeResource CaptionTextBlockStyle}" 
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                        
-                        <Button Grid.Row="0" Grid.Column="1" 
-                                x:Name="RecordHotkeyButton"
-                                Content="{x:Bind ViewModel.HotkeyText, Mode=OneWay}" 
-                                Click="RecordHotkeyButton_Click" 
-                                MinWidth="120"
-                                VerticalAlignment="Center"/>
-                    </Grid>
-                </Border>
-            </StackPanel>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-            <!-- Language Section -->
-            <StackPanel Spacing="8">
-                <TextBlock Text="Language" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
-                        BorderThickness="1" 
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                        CornerRadius="8" 
-                        Padding="16">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        
-                        <StackPanel Spacing="4" VerticalAlignment="Center">
-                            <TextBlock Text="Active Profile" FontWeight="SemiBold" />
-                            <TextBlock Text="Select the active transliteration language target." 
-                                       Style="{ThemeResource CaptionTextBlockStyle}" 
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                        
-                        <ComboBox Grid.Column="1"
-                                  ItemsSource="{x:Bind ViewModel.LanguageProfiles}"
+        <!-- Native TitleBar control for custom caption area -->
+        <TitleBar x:Name="AppTitleBar"
+                  Grid.Row="0"
+                  Title="Glotto Settings"
+                  IsBackButtonVisible="False"
+                  IsPaneToggleButtonVisible="False" />
+
+        <!-- Scrollable settings content -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="24" Padding="24,12,24,24" MaxWidth="600" HorizontalAlignment="Stretch">
+
+                <!-- Global Shortcut Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Keyboard" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <ui:SettingsCard Header="Toggle Glotto"
+                                     Description="Shortcut in any application to arm/disarm composition mode.">
+                        <ui:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE710;" />
+                        </ui:SettingsCard.HeaderIcon>
+                        <Button x:Name="RecordHotkeyButton"
+                                Content="{x:Bind ViewModel.HotkeyText, Mode=OneWay}"
+                                Click="RecordHotkeyButton_Click"
+                                MinWidth="130" />
+                    </ui:SettingsCard>
+                </StackPanel>
+
+                <!-- Language Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Language" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <ui:SettingsCard Header="Active Profile"
+                                     Description="Transliteration language target profile.">
+                        <ui:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE7C1;" />
+                        </ui:SettingsCard.HeaderIcon>
+                        <ComboBox ItemsSource="{x:Bind ViewModel.LanguageProfiles}"
                                   SelectedValuePath="Id"
                                   DisplayMemberPath="DisplayName"
                                   SelectedValue="{x:Bind ViewModel.ActiveProfileId, Mode=TwoWay}"
-                                  MinWidth="120"
-                                  VerticalAlignment="Center"/>
-                    </Grid>
-                </Border>
+                                  MinWidth="130" />
+                    </ui:SettingsCard>
+                </StackPanel>
+
+                <!-- Transliteration Providers Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Transliteration Providers" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="Drag items to prioritize lookup engines."
+                               Style="{ThemeResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                    <ListView x:Name="ProvidersListView"
+                              ItemsSource="{x:Bind ViewModel.Providers}"
+                              SelectionMode="None"
+                              CanReorderItems="True"
+                              AllowDrop="True"
+                              CanDragItems="True"
+                              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                              BorderThickness="1"
+                              CornerRadius="8"
+                              Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                              DragItemsCompleted="ProvidersListView_DragItemsCompleted">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="0" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:ProviderItemViewModel">
+                                <Grid Padding="16,12" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Drag handle -->
+                                    <FontIcon Grid.Column="0"
+                                              Glyph="&#xE784;"
+                                              FontSize="14"
+                                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                              VerticalAlignment="Center" />
+
+                                    <!-- Move buttons -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                        <Button Command="{Binding ElementName=RecordHotkeyButton, Path=DataContext.MoveUpCommand}"
+                                                CommandParameter="{Binding}"
+                                                Padding="4" Height="26" Width="26" CornerRadius="4">
+                                            <FontIcon Glyph="&#xE70E;" FontSize="11" />
+                                        </Button>
+                                        <Button Command="{Binding ElementName=RecordHotkeyButton, Path=DataContext.MoveDownCommand}"
+                                                CommandParameter="{Binding}"
+                                                Padding="4" Height="26" Width="26" CornerRadius="4">
+                                            <FontIcon Glyph="&#xE70D;" FontSize="11" />
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- Icon -->
+                                    <FontIcon Grid.Column="2"
+                                              Glyph="{x:Bind Icon}"
+                                              FontSize="16"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                              VerticalAlignment="Center" />
+
+                                    <!-- Text Details -->
+                                    <StackPanel Grid.Column="3" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{x:Bind Subtitle}"
+                                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+
+                                    <!-- Priority -->
+                                    <Border Grid.Column="4"
+                                            Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                            CornerRadius="4"
+                                            Padding="6,2"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Priority, Mode=OneWay}"
+                                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   FontFamily="Consolas" />
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </StackPanel>
+
+                <!-- Sound Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Sound" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    
+                    <ui:SettingsExpander Header="Toggle Sound"
+                                         Description="Play sound effect when arming/disarming composition mode."
+                                         IsExpanded="{x:Bind ViewModel.SoundEnabled, Mode=OneWay}">
+                        <ui:SettingsExpander.HeaderIcon>
+                            <FontIcon Glyph="&#xE7F6;" />
+                        </ui:SettingsExpander.HeaderIcon>
+                        
+                        <ToggleSwitch x:Name="SoundToggle"
+                                      IsOn="{x:Bind ViewModel.SoundEnabled, Mode=TwoWay}"
+                                      OnContent=""
+                                      OffContent="" />
+
+                        <ui:SettingsExpander.Items>
+                            <ui:SettingsCard Header="Sound on Arm (ON)"
+                                             Description="System sound played when composition starts.">
+                                <ComboBox ItemsSource="{x:Bind ViewModel.AvailableSounds}"
+                                          DisplayMemberPath="DisplayName"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{x:Bind ViewModel.SelectedSoundOnId, Mode=TwoWay}"
+                                          MinWidth="160" />
+                            </ui:SettingsCard>
+                            <ui:SettingsCard Header="Sound on Disarm (OFF)"
+                                             Description="System sound played when composition ends.">
+                                <ComboBox ItemsSource="{x:Bind ViewModel.AvailableSounds}"
+                                          DisplayMemberPath="DisplayName"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{x:Bind ViewModel.SelectedSoundOffId, Mode=TwoWay}"
+                                          MinWidth="160" />
+                            </ui:SettingsCard>
+                        </ui:SettingsExpander.Items>
+                    </ui:SettingsExpander>
+                </StackPanel>
+
+                <!-- About Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="About" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <ui:SettingsCard Header="Glotto"
+                                     Description="Version 1.0.0">
+                        <ui:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE946;" />
+                        </ui:SettingsCard.HeaderIcon>
+                        <HyperlinkButton Content="Send Feedback / GitHub"
+                                         NavigateUri="https://github.com/VibeNoobNotFound/Glotto"
+                                         Padding="0" />
+                    </ui:SettingsCard>
+                </StackPanel>
+
             </StackPanel>
-
-            <!-- Transliteration Providers Section -->
-            <StackPanel Spacing="8">
-                <TextBlock Text="Transliteration Providers" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                <TextBlock Text="Prioritize engines by moving them up or down." 
-                           Style="{ThemeResource CaptionTextBlockStyle}" 
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                
-                <ListView ItemsSource="{x:Bind ViewModel.Providers}" 
-                          SelectionMode="None" 
-                          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
-                          BorderThickness="1" 
-                          CornerRadius="8" 
-                          Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="local:ProviderItemViewModel">
-                            <Grid Padding="12,8" ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Move Up/Down Controls -->
-                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                                    <Button Command="{Binding ElementName=RecordHotkeyButton, Path=DataContext.MoveUpCommand}" 
-                                            CommandParameter="{Binding}" 
-                                            Padding="4" Height="28" Width="28">
-                                        <FontIcon Glyph="&#xE70E;" FontSize="12" />
-                                    </Button>
-                                    <Button Command="{Binding ElementName=RecordHotkeyButton, Path=DataContext.MoveDownCommand}" 
-                                            CommandParameter="{Binding}" 
-                                            Padding="4" Height="28" Width="28">
-                                        <FontIcon Glyph="&#xE70D;" FontSize="12" />
-                                    </Button>
-                                </StackPanel>
-
-                                <!-- Icon -->
-                                <FontIcon Grid.Column="1" 
-                                          Glyph="{x:Bind Icon}" 
-                                          FontSize="16" 
-                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                                          VerticalAlignment="Center"/>
-
-                                <!-- Text Details -->
-                                <StackPanel Grid.Column="3" Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" />
-                                    <TextBlock Text="{x:Bind Subtitle}" 
-                                               Style="{ThemeResource CaptionTextBlockStyle}" 
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-
-                                <!-- Priority Tag -->
-                                <Border Grid.Column="4" 
-                                        Background="{ThemeResource ControlFillColorDefaultBrush}" 
-                                        CornerRadius="4" 
-                                        Padding="6,2" 
-                                        VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Priority, Mode=OneWay}" 
-                                               Style="{ThemeResource CaptionTextBlockStyle}" 
-                                               FontFamily="Consolas" />
-                                </Border>
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-            </StackPanel>
-
-            <!-- About Section -->
-            <StackPanel Spacing="8">
-                <TextBlock Text="About" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
-                        BorderThickness="1" 
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                        CornerRadius="8" 
-                        Padding="16">
-                    <StackPanel Spacing="12">
-                        <Grid>
-                            <TextBlock Text="Version" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            <TextBlock Text="1.0.0" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                        </Grid>
-                        <HyperlinkButton Content="Send Feedback / GitHub" NavigateUri="https://github.com/VibeNoobNotFound/Glotto" Padding="0"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-        </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </Window>

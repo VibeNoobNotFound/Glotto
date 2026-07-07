@@ -64,13 +64,17 @@ public sealed class TrayIconManager : IDisposable
             ? "Glotto - Armed (type phonetically)"
             : "Glotto - Idle (right-click for menu, double-click to arm)";
 
-        // Update the GeneratedIconSource text to reflect state.
-        // GeneratedIconSource is the correct H.NotifyIcon type for code-driven icon updates.
+        // GeneratedIconSource renders reliably without needing a .ico file.
+        // Blue = idle, Green = armed — matches the macOS Glotto convention.
         _taskbarIcon.IconSource = new GeneratedIconSource
         {
-            Text = armed ? "🔵" : "⭕",
-            FontFamily = new("Segoe UI Emoji"),
-            FontSize = 48
+            Text = "\uF1D4",
+            Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                armed
+                    ? Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x10, 0x7C, 0x10)   // green
+                    : Microsoft.UI.ColorHelper.FromArgb(0xFF, 0xFF, 0xFF, 0xFF)), // white
+            FontFamily = new("Segoe Fluent Icons"),
+            Margin = new Thickness(16, 16, 0, 0)
         };
     }
 

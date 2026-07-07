@@ -153,18 +153,42 @@ struct SettingsView: View {
                     granted: permissionManager.hasAccessibility,
                     action: { permissionManager.openAccessibilitySettings() }
                 )
+                permissionRow(
+                    title: "Input Monitoring",
+                    detail: "Required(?, I think) to sucessfully capture and inject text.",
+                    icon: "keyboard",
+                    granted: permissionManager.hasInputMonitoring,
+                    action: { permissionManager.openInputMonitoringSettings() }
+                )
             }
 
             // MARK: About
             Section("About") {
+                
+                
+                HStack {
+                    Text("Almost fully vibe coded by")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Link("NoobNotFound", destination: URL(string: "https://github.com/NoobNotFound")!)
+                        .font(.body)
+                }
                 HStack {
                     Text("Version")
                     Spacer()
-                    Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                    Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")
                         .foregroundStyle(.secondary)
                 }
-                Link("Send Feedback", destination: URL(string: "https://github.com")!)
-                    .font(.body)
+                
+                HStack {
+                    Link("Github", destination: URL(string: "https://github.com/VibeNoobNotFound/Glotto")!)
+                        .font(.body)
+                    Spacer()
+                    Text("MIT")
+                        .foregroundStyle(.secondary)
+                }
+                Text("To get the latest updates, You have to manually check out on the [GitHub releases](https://github.com/VibeNoobNotFound/Glotto/Releases) for now.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

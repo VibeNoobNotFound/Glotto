@@ -137,16 +137,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showOnboarding()
             return
         }
+        let wasArmed = eventTapManager.isArmed
         eventTapManager.toggle()
         let armed = eventTapManager.isArmed
+
+        // If we tried to arm but the tap failed to install, surface a clear error.
+        // This happens when Input Monitoring is granted in the UI but the OS hasn't
+        // propagated it yet, or the user revoked it while the app was running.
+        if !wasArmed && !armed {
+            showArmFailureAlert()
+            return
+        }
+
         updateStatusIcon(armed: armed)
-        
+
         // Retrieve and play selected sound
         let soundKey = armed ? "enableSound" : "disableSound"
         let defaultSound = armed ? "Tink" : "Blow"
         let soundName = UserDefaults.standard.string(forKey: soundKey) ?? defaultSound
         if soundName != "None" {
             NSSound(named: NSSound.Name(soundName))?.play()
+        }
+    }
+
+    private func showArmFailureAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Glotto couldn't arm"
+        alert.informativeText = """
+            The global key-intercept tap failed to install. This usually means \
+            Input Monitoring permission was revoked or not fully propagated yet.
+
+            Open System Settings › Privacy & Security › Input Monitoring, \
+            toggle Glotto off and back on, then try again.
+            """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Input Monitoring Settings")
+        alert.addButton(withTitle: "Dismiss")
+        if alert.runModal() == .alertFirstButtonReturn {
+            permissionManager.openInputMonitoringSettings()
         }
     }
 

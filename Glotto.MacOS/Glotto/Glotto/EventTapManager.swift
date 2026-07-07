@@ -86,6 +86,12 @@ final class EventTapManager {
 
     /// Returns nil to swallow the event, or the original event to pass it through.
     func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let tap = self.tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            }
+            return Unmanaged.passUnretained(event)
+        }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
@@ -125,12 +131,12 @@ final class EventTapManager {
                 // Swallow: the buffer pop is all that's needed; nothing is in the text field.
                 return nil
 
-            // Number keys 1–5 for direct candidate selection
-            case kVK_ANSI_1: dispatch { controller.handleSpecialKey(.numberSelect(1)) }; return nil
-            case kVK_ANSI_2: dispatch { controller.handleSpecialKey(.numberSelect(2)) }; return nil
-            case kVK_ANSI_3: dispatch { controller.handleSpecialKey(.numberSelect(3)) }; return nil
-            case kVK_ANSI_4: dispatch { controller.handleSpecialKey(.numberSelect(4)) }; return nil
-            case kVK_ANSI_5: dispatch { controller.handleSpecialKey(.numberSelect(5)) }; return nil
+            // Number keys 1–5 for direct candidate selection (only when Shift is not pressed)
+            case kVK_ANSI_1 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(1)) }; return nil
+            case kVK_ANSI_2 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(2)) }; return nil
+            case kVK_ANSI_3 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(3)) }; return nil
+            case kVK_ANSI_4 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(4)) }; return nil
+            case kVK_ANSI_5 where !flags.contains(.maskShift): dispatch { controller.handleSpecialKey(.numberSelect(5)) }; return nil
 
             default:
                 break

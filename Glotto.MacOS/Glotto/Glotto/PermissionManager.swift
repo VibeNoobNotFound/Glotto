@@ -1,30 +1,36 @@
 import AppKit
 import ApplicationServices
+import IOKit.hid
 
-/// Checks and requests the Accessibility permission Glotto needs.
-/// Accessibility allows Glotto to read the caret screen coordinates, query focused elements,
-/// inject transliterated text, and establish a session-level global event tap.
+/// Checks and requests the macOS privacy permissions Glotto depends on.
+///
+/// - Accessibility is **required**: gates AX-based caret/text-field capture and
+///   synthetic keystroke injection.
+/// - Input Monitoring is **required**: the global session-level CGEventTap that
+///   intercepts key-downs is gated by Input Monitoring (kIOHIDRequestTypeListenEvent)
+///   separately from Accessibility on modern macOS.
 @MainActor
 final class PermissionManager: ObservableObject {
 
     @Published private(set) var hasAccessibility: Bool = false
+    @Published private(set) var hasInputMonitoring: Bool = false
 
     private var pollTimer: Timer?
 
     // MARK: - Status checks
 
-    /// Synchronously check the accessibility permission state.
+    /// Synchronously refresh both permission states.
     func refresh() {
         hasAccessibility = AXIsProcessTrusted()
+        hasInputMonitoring = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
     }
 
-    /// Returns true when the required Accessibility permission is granted.
-    var allGranted: Bool { hasAccessibility }
+    /// True when every permission Glotto requires to function is granted.
+    var allGranted: Bool { hasAccessibility && hasInputMonitoring }
 
     // MARK: - Polling
 
-    /// Start polling every `interval` seconds until the permission is granted,
-    /// then call `onGranted`.
+    /// Polls every `interval` seconds. Calls `onGranted` once both permissions are satisfied.
     func startPolling(interval: TimeInterval = 1.0, onGranted: @escaping () -> Void) {
         stopPolling()
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
@@ -44,19 +50,36 @@ final class PermissionManager: ObservableObject {
         pollTimer = nil
     }
 
-    // MARK: - Deep links
-
-    /// Open the Accessibility section of Privacy & Security in System Settings.
-    func openAccessibilitySettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        NSWorkspace.shared.open(url)
-    }
-
     // MARK: - Request helpers
 
-    /// Trigger the system's Accessibility permission prompt.
+    /// Triggers the system Accessibility prompt (deep-links to System Settings).
     func requestAccessibilityIfNeeded() {
         let opts: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true]
         _ = AXIsProcessTrustedWithOptions(opts)
+    }
+
+    /// Triggers the system Input Monitoring consent prompt.
+    func requestInputMonitoringIfNeeded() {
+        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        refresh()
+    }
+
+    // MARK: - Deep links
+
+    /// Open Accessibility in Privacy & Security.
+    func openAccessibilitySettings() {
+        open(pane: "Privacy_Accessibility")
+    }
+
+    /// Open Input Monitoring in Privacy & Security.
+    func openInputMonitoringSettings() {
+        open(pane: "Privacy_ListenEvent")
+    }
+
+    // MARK: - Private
+
+    private func open(pane: String) {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") else { return }
+        NSWorkspace.shared.open(url)
     }
 }

@@ -19,16 +19,58 @@
     mc:Ignorable="d"
     Title="">
 
-    <!-- No SystemBackdrop — see note above -->
-
     <Border x:Name="RootBorder"
             CornerRadius="14"
-            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            Background="Transparent"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
             Padding="0"
             MaxWidth="320"
-            MinWidth="200">
+            MinWidth="200"
+            Opacity="0.0">
+
+        <Border.Resources>
+            <Storyboard x:Name="ShowStoryboard">
+                <DoubleAnimation Storyboard.TargetName="RootBorder"
+                                 Storyboard.TargetProperty="Opacity"
+                                 From="0.0" To="1.0"
+                                 Duration="0:0:0.12">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="RootBorderTransform"
+                                 Storyboard.TargetProperty="Y"
+                                 From="-8.0" To="0.0"
+                                 Duration="0:0:0.12">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+            <Storyboard x:Name="HideStoryboard">
+                <DoubleAnimation Storyboard.TargetName="RootBorder"
+                                 Storyboard.TargetProperty="Opacity"
+                                 To="0.0"
+                                 Duration="0:0:0.10">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="RootBorderTransform"
+                                 Storyboard.TargetProperty="Y"
+                                 To="-6.0"
+                                 Duration="0:0:0.10">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+        </Border.Resources>
+
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="RootBorderTransform" Y="-8.0" />
+        </Border.RenderTransform>
 
         <Border.Shadow>
             <ThemeShadow />
