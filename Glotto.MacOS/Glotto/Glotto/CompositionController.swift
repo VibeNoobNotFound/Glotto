@@ -96,6 +96,17 @@ final class CompositionController: ObservableObject {
         }
     }
 
+    // MARK: - Profile switching
+
+    /// Switches the active language profile (e.g. when the user picks a different profile in
+    /// Settings). Any in-progress composition is cancelled first — its candidates were computed
+    /// for the old profile and would otherwise be silently wrong for the new one.
+    func setProfile(_ profile: LanguageProfile) {
+        guard profile.id != session.profile.id else { return }
+        cancelComposition()
+        session.profile = profile
+    }
+
     // MARK: - Keystroke handling (called from EventTapManager)
 
     /// Called by EventTapManager for each printable Latin character captured while armed.
@@ -200,7 +211,17 @@ final class CompositionController: ObservableObject {
         lookupTask?.cancel()
         lookupTask = Task { [weak self] in
             // Wait for the debounce window.
-            try? await Task.sleep(nanoseconds: UInt64(self?.debounceInterval ?? 0.13 * 1_000_000_000))
+            // NOTE: parentheses are load-bearing here — `??` binds looser than `*` in Swift,
+            // so `self?.debounceInterval ?? 0.13 * 1_000_000_000` previously parsed as
+            // `self?.debounceInterval ?? (0.13 * 1_000_000_000)`. Since `self` is non-nil at this
+            // point almost every time, the expression evaluated to the raw `0.13` (seconds)
+            // truncated straight into a nanosecond count, i.e. effectively slept for 0ns.
+            // That silently disabled debouncing entirely — every keystroke fired an immediate
+            // network request instead of waiting for a pause in typing.
+
+            //                  HIRUJA EDURAPOLA - 07/07/2026
+            let interval = self?.debounceInterval ?? 0.13
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }
 
             let text = await self.session.buffer
