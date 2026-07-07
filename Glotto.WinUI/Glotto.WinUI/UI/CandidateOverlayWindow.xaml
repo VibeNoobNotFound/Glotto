@@ -19,11 +19,12 @@
     mc:Ignorable="d"
     Title="">
 
-    <!-- No SystemBackdrop — see note above -->
+    <!-- DesktopAcrylicController with IsInputActive=true provides the backdrop.
+         RootBorder Background must be Transparent so the acrylic renders through it. -->
 
     <Border x:Name="RootBorder"
             CornerRadius="14"
-            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            Background="Transparent"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
             Padding="0"

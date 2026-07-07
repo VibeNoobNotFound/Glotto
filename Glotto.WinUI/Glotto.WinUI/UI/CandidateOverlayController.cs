@@ -4,6 +4,10 @@
 // Manages the floating non-activating candidate panel window.
 // The window is created lazily on first show, and hidden (not destroyed) between compositions
 // to avoid the overhead of Window creation on each session.
+//
+// THREADING: ALL window operations (create, show, hide, update, reposition)
+// must happen on the UI dispatcher thread. This class dispatches everything
+// via _dispatcherQueue. Callers may call from any thread.
 
 using Glotto.WinUI.Core;
 using Glotto.WinUI.Interop;
@@ -37,23 +41,30 @@ public sealed class CandidateOverlayController
         _dispatcherQueue = dispatcherQueue;
     }
 
-    // MARK: - Show / update / hide
+    // MARK: - Show / update / hide (thread-safe — dispatches to UI thread internally)
 
     public void ShowOrUpdate(CompositionSession session)
     {
         _isPresented = true;
         _lastSession = session;
 
-        EnsureWindowCreated();
-        _window!.UpdateSession(session, _isPresented);
-        Reposition();
-        _window.ShowNonActivating();
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            EnsureWindowCreated();
+            _window!.UpdateSession(session, isPresented: true);
+            Reposition();
+            _window.ShowNonActivating();
+        });
     }
 
     public void Update(CompositionSession session)
     {
         _lastSession = session;
-        _window?.UpdateSession(session, _isPresented);
+
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            _window?.UpdateSession(session, _isPresented);
+        });
     }
 
     public void Hide()
@@ -61,25 +72,31 @@ public sealed class CandidateOverlayController
         if (!_isPresented) return;
         _isPresented = false;
 
-        // Notify the view to run its hide animation, then conceal the window
-        _window?.UpdateSession(_lastSession, isPresented: false);
-        _ = Task.Run(async () =>
+        var capturedSession = _lastSession;
+        _dispatcherQueue.TryEnqueue(() =>
         {
-            await Task.Delay(200);  // match animation duration
-            _dispatcherQueue.TryEnqueue(() =>
+            _window?.UpdateSession(capturedSession, isPresented: false);
+
+            // Delay-hide after animation completes
+            _ = Task.Run(async () =>
             {
-                if (!_isPresented)
-                    _window?.HideWindow();
+                await Task.Delay(200);
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!_isPresented)
+                        _window?.HideWindow();
+                });
             });
         });
     }
 
-    // MARK: - Positioning
+    // MARK: - Positioning (must run on UI thread — called from within TryEnqueue block)
 
     /// <summary>
     /// Position the panel just below the caret rect from UiAutomationBridge.
     /// Falls back to focused element frame, then mouse cursor.
     /// Clamps to screen bounds so the panel is never partially off-screen.
+    /// Must be called on the UI thread.
     /// </summary>
     public void Reposition()
     {
@@ -107,7 +124,7 @@ public sealed class CandidateOverlayController
         int x, y, w, h;
         w = (int)(PanelWidth * scale);
 
-        int estimatedHeight = 36; // Header height
+        int estimatedHeight = 36; // Header / input row height
         if (!_lastSession.IsEmpty)
         {
             if (_lastSession.IsLoading)
@@ -126,7 +143,7 @@ public sealed class CandidateOverlayController
         }
         else
         {
-            estimatedHeight += 38; // "Type to transliterate..." message
+            estimatedHeight += 38; // "Type to transliterate..." placeholder row
         }
 
         h = (int)(estimatedHeight * scale);
@@ -150,7 +167,7 @@ public sealed class CandidateOverlayController
         _window.MoveAndResize(clampedX, clampedY, w, h);
     }
 
-    // MARK: - Window management
+    // MARK: - Window management (must run on UI thread)
 
     private void EnsureWindowCreated()
     {

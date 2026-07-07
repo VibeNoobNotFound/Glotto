@@ -237,10 +237,15 @@ internal static class NativeMethods
     // ─── Window style manipulation (for non-activating overlay) ─────────────
 
     internal const int GWL_EXSTYLE = -20;
+    internal const int GWL_STYLE = -16;
+    
     internal const uint WS_EX_NOACTIVATE  = 0x08000000;
     internal const uint WS_EX_TOOLWINDOW  = 0x00000080;
     internal const uint WS_EX_APPWINDOW   = 0x00040000;
     internal const uint WS_EX_TOPMOST     = 0x00000008;
+
+    internal const uint WS_POPUP          = 0x80000000;
+    internal const uint WS_VISIBLE        = 0x10000000;
 
     internal static readonly IntPtr HWND_TOPMOST   = new(-1);
     internal static readonly IntPtr HWND_NOTOPMOST = new(-2);
@@ -302,4 +307,32 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetCursorPos(out POINT lpPoint);
+
+    // ─── DWM (for transparency) ──────────────────────────────────────────────
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MARGINS
+    {
+        public int cxLeftWidth;
+        public int cxRightWidth;
+        public int cyTopHeight;
+        public int cyBottomHeight;
+    }
+
+    [DllImport("dwmapi.dll")]
+    internal static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct DWM_BLURBEHIND
+    {
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.Bool)] public bool fEnable;
+        public IntPtr hRgnBlur;
+        [MarshalAs(UnmanagedType.Bool)] public bool fTransitionOnMaximized;
+    }
+
+    internal const uint DWM_BB_ENABLE = 0x00000001;
+
+    [DllImport("dwmapi.dll")]
+    internal static extern int DwmEnableBlurBehindWindow(IntPtr hwnd, ref DWM_BLURBEHIND pBlurBehind);
 }

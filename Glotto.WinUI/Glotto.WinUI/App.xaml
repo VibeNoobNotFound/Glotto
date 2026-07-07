@@ -24,10 +24,7 @@
                 ContextMenuMode="PopupMenu">
 
                 <tb:TaskbarIcon.IconSource>
-                    <tb:GeneratedIconSource
-                        Text="⭕"
-                        FontFamily="Segoe UI Emoji"
-                        FontSize="48" />
+                    <BitmapImage UriSource="ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png" />
                 </tb:TaskbarIcon.IconSource>
 
                 <tb:TaskbarIcon.ContextFlyout>

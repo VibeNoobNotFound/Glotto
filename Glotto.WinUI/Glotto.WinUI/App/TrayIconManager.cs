@@ -18,6 +18,7 @@ using System.Windows.Input;
 using H.NotifyIcon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Glotto.WinUI.Tray;
 
@@ -64,14 +65,18 @@ public sealed class TrayIconManager : IDisposable
             ? "Glotto - Armed (type phonetically)"
             : "Glotto - Idle (right-click for menu, double-click to arm)";
 
-        // Update the GeneratedIconSource text to reflect state.
-        // GeneratedIconSource is the correct H.NotifyIcon type for code-driven icon updates.
-        _taskbarIcon.IconSource = new GeneratedIconSource
+        var uriString = armed
+            ? "ms-appx:///Assets/Square44x44Logo.scale-200.png"
+            : "ms-appx:///Assets/Square44x44Logo.targetsize-24_altform-unplated.png";
+
+        try
         {
-            Text = armed ? "🔵" : "⭕",
-            FontFamily = new("Segoe UI Emoji"),
-            FontSize = 48
-        };
+            _taskbarIcon.IconSource = new BitmapImage(new Uri(uriString));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[TrayIconManager] Error updating icon source: {ex.Message}");
+        }
     }
 
     // MARK: - Helpers
