@@ -10,7 +10,6 @@ final class CandidateOverlayController {
 
     private var panel: NSPanel?
     private var hostingView: NSHostingView<CandidatePanelView>?
-    private let caretObserver = CaretChangeObserver()
     private let panelWidth: CGFloat = 320
     private let panelPadding: CGFloat = 4   // gap between caret bottom and panel top
 
@@ -20,12 +19,23 @@ final class CandidateOverlayController {
     private var isPresented = false
     private var lastSession: CompositionSession?
 
+    /// Reactively repositions the panel on selection/window/focus changes that
+    /// don't come from a keystroke (scrolling, window drag, click elsewhere in
+    /// the same field). Started/stopped alongside the composition session.
+    private let caretObserver = CaretChangeObserver()
+
+    init() {
+        caretObserver.onCaretMoved = { [weak self] in
+            guard let self, self.isPresented else { return }
+            self.reposition()
+        }
+    }
+
     // MARK: - Show / update / hide
 
     func showOrUpdate(session: CompositionSession) {
         self.isPresented = true
         self.lastSession = session
-        startCaretObservation()
         let isFirstShow = (panel == nil)
         if panel == nil {
             createPanel(session: session)
@@ -34,7 +44,8 @@ final class CandidateOverlayController {
             update(session: session)
         }
         reposition()
-        
+        startObservingCaretIfNeeded()
+
         if isFirstShow || panel?.alphaValue == 0 {
             panel?.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { context in
@@ -47,14 +58,20 @@ final class CandidateOverlayController {
         }
     }
 
-    func update(session: CompositionSession) {
+    /// Updates the panel's content. `reposition: true` should be passed whenever
+    /// the update can change the panel's size (e.g. loading placeholder -> real
+    /// candidate list) so it doesn't drift away from the caret; keystroke-driven
+    /// callers that immediately call `reposition()` themselves can pass `false`
+    /// to avoid doing the layout pass twice.
+    func update(session: CompositionSession, reposition shouldReposition: Bool = false) {
         hostingView?.rootView = makePanelView(session: session)
-        if isPresented {
+        if shouldReposition {
             reposition()
         }
     }
 
     func hide() {
+        caretObserver.stop()
         guard let panel, isPresented else { return }
         self.isPresented = false
         
@@ -69,18 +86,24 @@ final class CandidateOverlayController {
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().alphaValue = 0.0
         }, completionHandler: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                // Only orderOut and clean up if it was not shown again during the fadeout
-                if !self.isPresented {
-                    panel.orderOut(nil)
-                    // Clear references so the next creation triggers onAppear cleanly
-                    self.panel = nil
-                    self.hostingView = nil
-                    self.caretObserver.stop()
-                }
+            guard let self else { return }
+            // Only orderOut and clean up if it was not shown again during the fadeout
+            if !self.isPresented {
+                panel.orderOut(nil)
+                // Clear references so the next creation triggers onAppear cleanly
+                self.panel = nil
+                self.hostingView = nil
             }
         })
+    }
+
+    /// Starts the AXObserver-based reactive repositioning against whatever
+    /// element currently has focus. Called once per show — re-focusing the
+    /// same field mid-session is cheap to re-arm and keeps the observer
+    /// pointed at the right element if focus moved within the same app.
+    private func startObservingCaretIfNeeded() {
+        guard let focused = AccessibilityBridge.focusedElement() else { return }
+        caretObserver.start(observing: focused)
     }
 
     // MARK: - Panel creation
@@ -128,23 +151,44 @@ final class CandidateOverlayController {
 
         let panelSize = panel.frame.size
 
-        // Try to get the caret rect and place the panel just below it.
+        // Fallback chain, in order of trustworthiness:
+        //   1. AccessibilityBridge's tiered resolver (exact/derived/estimated,
+        //      cross-validated against real window bounds).
+        //   2. Last mouse-click location in the current app — doesn't depend on
+        //      AX at all, so it's a reliable anchor for apps with poor/custom
+        //      text accessibility (e.g. Pages' canvas-based text engine).
+        //   3. The focused element's own frame — anchored near its TOP edge.
+        //      (Previously anchored to `.minY`, which in AppKit's bottom-left
+        //      coordinate space is the *bottom* of the rect — for apps whose
+        //      focused element is the entire document view, e.g. Word/Pages,
+        //      that put the panel at the literal bottom of the window.)
+        //   4. Current mouse cursor position — final catch-all.
         let origin: NSPoint
-        if let caretGeometry = AccessibilityBridge.caretGeometry() {
+        if let caretGeometry = AccessibilityBridge.resolveCaretGeometry() {
             let caretRect = caretGeometry.rect
             origin = NSPoint(
                 x: caretRect.minX,
                 y: caretRect.minY - panelSize.height - panelPadding
             )
+        } else if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+                  let clickLocation = MouseClickTracker.shared.recentClickLocation(forPID: pid) {
+            origin = NSPoint(
+                x: clickLocation.x,
+                y: clickLocation.y - panelSize.height - panelPadding - 20 // clear the clicked line itself
+            )
         } else if let focused = AccessibilityBridge.focusedElement(),
                   let elementFrame = AccessibilityBridge.elementFrame(in: focused) {
-            // Fallback 1: bottom-left of the focused text area/field (MS Word, Pages, Electron)
+            // Fallback 3: near the TOP of the focused text area/field, not the
+            // bottom — for a large multi-line container (MS Word, Pages,
+            // Electron apps whose editable area spans the whole window) the
+            // insertion point is essentially never at the frame's bottom edge.
+            let lineHeightGuess: CGFloat = 20
             origin = NSPoint(
                 x: elementFrame.minX,
-                y: elementFrame.minY - panelSize.height - panelPadding
+                y: elementFrame.maxY - lineHeightGuess - panelSize.height - panelPadding
             )
         } else {
-            // Fallback 2: bottom-right of the current mouse cursor location
+            // Fallback 4: bottom-right of the current mouse cursor location
             let mouseLoc = NSEvent.mouseLocation
             origin = NSPoint(
                 x: mouseLoc.x + 10,
@@ -154,13 +198,6 @@ final class CandidateOverlayController {
 
         let clampedOrigin = clamp(origin: origin, panelSize: panelSize)
         panel.setFrameOrigin(clampedOrigin)
-    }
-
-    private func startCaretObservation() {
-        caretObserver.onCaretChanged = { [weak self] in
-            self?.reposition()
-        }
-        caretObserver.start()
     }
 
     /// Keep the panel fully on-screen across multiple monitors.

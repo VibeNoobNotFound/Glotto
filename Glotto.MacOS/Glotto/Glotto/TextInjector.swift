@@ -1,7 +1,9 @@
 import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
-import os
+import os.log
+
+private let logger = Logger(subsystem: "dev.noobnotfound.glotto", category: "TextInjector")
 
 /// Commits a transliterated candidate into the focused text field.
 ///
@@ -27,7 +29,6 @@ import os
 ///   that doesn't respond to paste either.
 @MainActor
 final class TextInjector {
-    private let logger = Logger(subsystem: "dev.noobnotfound.glotto", category: "TextInjector")
 
     // MARK: - Main entry point
 
@@ -46,21 +47,21 @@ final class TextInjector {
         // Step 2: AX fast path, with verification — only attempted, never trusted blindly.
         if let element = AccessibilityBridge.focusedElement(),
            tryVerifiedAXInsertion(candidate: candidate, into: element) {
-            logger.info("AX insertion path verified.")
+            logger.debug("AX path verified")
             // Fire space immediately — no clipboard restore delay to wait for.
             if suffix == " " { postKeyEvent(keyCode: UInt16(kVK_Space), flags: []) }
             return
         }
 
         // Step 3: clipboard paste fallback.
-        logger.info("AX insertion unavailable or unverified. Using clipboard paste.")
+        logger.debug("AX path unavailable/unverified — using clipboard paste")
         if await injectViaClipboard(candidate: candidate, suffix: suffix) {
-            logger.info("Clipboard paste path posted.")
+            logger.debug("Clipboard paste path succeeded")
             return
         }
 
         // Step 4: last resort synthetic keystroke — include suffix directly in the string.
-        logger.info("Clipboard path failed. Using synthetic Unicode keystroke.")
+        logger.debug("Clipboard path failed — using synthetic Unicode keystroke")
         injectViaKeystrokes(candidate + suffix)
     }
 
@@ -101,7 +102,6 @@ final class TextInjector {
     @discardableResult
     private func injectViaClipboard(candidate: String, suffix: String = "") async -> Bool {
         let pasteboard = NSPasteboard.general
-        let originalChangeCount = pasteboard.changeCount
         let savedItems: [(types: [NSPasteboard.PasteboardType], data: [NSPasteboard.PasteboardType: Data])] =
             (pasteboard.pasteboardItems ?? []).map { item in
                 let dataMap = item.types.reduce(into: [NSPasteboard.PasteboardType: Data]()) { acc, ptype in
@@ -112,6 +112,11 @@ final class TextInjector {
 
         pasteboard.clearContents()
         pasteboard.setString(candidate, forType: .string)
+        // Snapshot the change count right after our own write — if it differs when
+        // the restore timer fires, something else (the user copying elsewhere,
+        // another app) wrote to the pasteboard in the meantime, and restoring our
+        // saved snapshot would silently clobber that newer content.
+        let changeCountAfterOurWrite = pasteboard.changeCount
 
         postKeyEvent(keyCode: UInt16(kVK_ANSI_V), flags: .maskCommand)
 
@@ -123,8 +128,9 @@ final class TextInjector {
 
         // Restore the original clipboard after enough time for the app to consume the paste.
         try? await Task.sleep(nanoseconds: 400_000_000) // 400ms
-        guard pasteboard.changeCount <= originalChangeCount + 2 else {
-            logger.info("Skipping clipboard restore because pasteboard changed externally.")
+
+        guard pasteboard.changeCount == changeCountAfterOurWrite else {
+            logger.debug("Clipboard changed during paste window — skipping restore to avoid clobbering newer content")
             return true
         }
 
@@ -156,7 +162,7 @@ final class TextInjector {
             keyUp.post(tap: .cghidEventTap)
         }
 
-        logger.info("Synthetic Unicode keystroke path posted.")
+        logger.debug("Synthetic keystroke path")
     }
 
     // MARK: - Helpers

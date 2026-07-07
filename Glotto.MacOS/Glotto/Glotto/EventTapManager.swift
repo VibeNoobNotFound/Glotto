@@ -1,6 +1,8 @@
 import AppKit
 import Carbon.HIToolbox
-import os
+import os.log
+
+private let logger = Logger(subsystem: "dev.noobnotfound.glotto", category: "EventTapManager")
 
 /// Owns the CGEventTap that intercepts keystrokes system-wide while composition mode is armed.
 ///
@@ -14,7 +16,6 @@ import os
 final class EventTapManager {
 
     weak var compositionController: CompositionController?
-    private let logger = Logger(subsystem: "dev.noobnotfound.glotto", category: "EventTap")
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -25,11 +26,11 @@ final class EventTapManager {
     func arm() {
         guard !isArmed else { return }
         guard installTap() else {
-            logger.error("Failed to install CGEventTap. Accessibility/Input Monitoring may be missing.")
+            logger.error("Failed to install CGEventTap — Accessibility/Input Monitoring missing?")
             return
         }
         isArmed = true
-        logger.info("Event tap armed.")
+        logger.info("Armed")
     }
 
     func disarm() {
@@ -37,7 +38,7 @@ final class EventTapManager {
         removeTap()
         compositionController?.cancelComposition()
         isArmed = false
-        logger.info("Event tap disarmed.")
+        logger.info("Disarmed")
     }
 
     func toggle() {
@@ -95,6 +96,16 @@ final class EventTapManager {
             return Unmanaged.passUnretained(event)
         }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+
+        // Respect AppCompatibility overrides: never intercept keystrokes for apps
+        // where composition is explicitly disabled (password managers, secure
+        // system prompts) — pass every event straight through untouched.
+        if AppCompatibility.quirksForFrontmostApp().disableComposition {
+            if let controller = compositionController, !controller.session.isEmpty {
+                dispatch { controller.cancelComposition() }
+            }
+            return Unmanaged.passUnretained(event)
+        }
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags   = event.flags

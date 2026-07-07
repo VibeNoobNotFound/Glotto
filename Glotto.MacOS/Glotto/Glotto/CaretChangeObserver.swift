@@ -1,156 +1,93 @@
 import AppKit
 import ApplicationServices
 
+/// Watches the focused application's accessibility tree for events that should
+/// trigger an overlay reposition *without* a keystroke: text selection moving
+/// (e.g. the user clicks elsewhere in the same field), the focused element
+/// changing, or the window being moved/resized. Previously Glotto's panel only
+/// repositioned inside `CompositionController`'s keystroke handlers, so
+/// scrolling, dragging the window, or the field autoresizing mid-composition
+/// left the panel visibly detached from the caret until the next character.
+///
+/// Lifecycle: started when a composition session becomes non-empty, stopped
+/// when it's cancelled/committed. Scoped to the single frontmost process for
+/// the lifetime of one composition — cheap, and avoids the overhead of
+/// system-wide observation when the user isn't actively composing.
 @MainActor
-final class CaretChangeObserver: NSObject {
-    var onCaretChanged: (() -> Void)?
+final class CaretChangeObserver {
 
-    private let systemElement = AXUIElementCreateSystemWide()
-    private var observer: AXObserver?
+    /// Called on the main actor whenever a watched AX notification fires.
+    /// The caller (CandidateOverlayController) should call `reposition()`.
+    var onCaretMoved: (() -> Void)?
+
+    private var axObserver: AXObserver?
+    private var observedElement: AXUIElement?
     private var observedPID: pid_t?
-    private var observedFocusedElement: AXUIElement?
-    private var pendingRefresh: DispatchWorkItem?
-    private var isRunning = false
 
-    func start() {
-        guard !isRunning else { return }
-        isRunning = true
+    private static let notifications: [CFString] = [
+        kAXSelectedTextChangedNotification as CFString,
+        kAXFocusedUIElementChangedNotification as CFString,
+        kAXMovedNotification as CFString,
+        kAXResizedNotification as CFString,
+    ]
 
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(frontmostAppChanged(_:)),
-            name: NSWorkspace.didActivateApplicationNotification,
-            object: nil
-        )
+    // MARK: - Start / stop
 
-        retargetObserver()
-        scheduleRefresh()
+    /// Begins observing AX notifications for the process that owns `element`.
+    /// Safe to call repeatedly; re-starting tears down any prior observer first.
+    func start(observing element: AXUIElement) {
+        stop()
+
+        guard let pid = AccessibilityBridge.pid(of: element) else { return }
+
+        var observerRef: AXObserver?
+        let createResult = AXObserverCreate(pid, axObserverCallback, &observerRef)
+        guard createResult == .success, let observer = observerRef else { return }
+
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+
+        for notification in Self.notifications {
+            // Some roles/apps don't support every notification — failures here
+            // are expected and non-fatal, so we don't bail out on the first one.
+            AXObserverAddNotification(observer, element, notification, refcon)
+        }
+
+        // Also observe the application element itself for window move/resize,
+        // since those notifications are commonly posted on the app or window
+        // element rather than the focused text field.
+        let appElement = AXUIElementCreateApplication(pid)
+        AXObserverAddNotification(observer, appElement, kAXMovedNotification as CFString, refcon)
+        AXObserverAddNotification(observer, appElement, kAXResizedNotification as CFString, refcon)
+
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+
+        axObserver = observer
+        observedElement = element
+        observedPID = pid
     }
 
     func stop() {
-        guard isRunning else { return }
-        isRunning = false
-
-        NSWorkspace.shared.notificationCenter.removeObserver(self)
-        pendingRefresh?.cancel()
-        pendingRefresh = nil
-        tearDownObserver()
-    }
-
-    deinit {
-        NSWorkspace.shared.notificationCenter.removeObserver(self)
-    }
-
-    @objc
-    private func frontmostAppChanged(_ note: Notification) {
-        Task { @MainActor [weak self] in
-            self?.retargetObserver()
-            self?.scheduleRefresh()
-        }
-    }
-
-    private func retargetObserver() {
-        guard let app = NSWorkspace.shared.frontmostApplication else {
-            tearDownObserver()
-            return
-        }
-
-        if observedPID == app.processIdentifier, observer != nil {
-            refreshFocusedElementObservation()
-            return
-        }
-
-        tearDownObserver()
-
-        var newObserver: AXObserver?
-        guard AXObserverCreate(app.processIdentifier, CaretChangeObserver.observerCallback, &newObserver) == .success,
-              let newObserver
-        else { return }
-
-        let appElement = AXUIElementCreateApplication(app.processIdentifier)
-        AccessibilityBridge.wakeEnhancedAccessibilityIfNeeded()
-
-        addNotification(kAXFocusedUIElementChangedNotification, on: appElement, observer: newObserver)
-        addNotification(kAXFocusedWindowChangedNotification, on: appElement, observer: newObserver)
-        addNotification(kAXWindowMovedNotification, on: appElement, observer: newObserver)
-        addNotification(kAXWindowResizedNotification, on: appElement, observer: newObserver)
-        addNotification(kAXUIElementDestroyedNotification, on: appElement, observer: newObserver)
-
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(newObserver), .commonModes)
-
-        observer = newObserver
-        observedPID = app.processIdentifier
-        refreshFocusedElementObservation()
-    }
-
-    private func refreshFocusedElementObservation() {
-        guard let observer else { return }
-
-        if let previous = observedFocusedElement {
-            removeNotification(kAXSelectedTextChangedNotification, on: previous, observer: observer)
-            removeNotification(kAXValueChangedNotification, on: previous, observer: observer)
-            removeNotification(kAXMovedNotification, on: previous, observer: observer)
-            removeNotification(kAXResizedNotification, on: previous, observer: observer)
-            removeNotification(kAXUIElementDestroyedNotification, on: previous, observer: observer)
-        }
-
-        observedFocusedElement = AccessibilityBridge.focusedElement()
-
-        if let focused = observedFocusedElement {
-            addNotification(kAXSelectedTextChangedNotification, on: focused, observer: observer)
-            addNotification(kAXValueChangedNotification, on: focused, observer: observer)
-            addNotification(kAXMovedNotification, on: focused, observer: observer)
-            addNotification(kAXResizedNotification, on: focused, observer: observer)
-            addNotification(kAXUIElementDestroyedNotification, on: focused, observer: observer)
-        }
-    }
-
-    private func tearDownObserver() {
-        if let observer {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
-        }
-        observer = nil
+        guard let observer = axObserver else { return }
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        axObserver = nil
+        observedElement = nil
         observedPID = nil
-        observedFocusedElement = nil
     }
 
-    private func addNotification(_ name: String, on element: AXUIElement, observer: AXObserver) {
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        _ = AXObserverAddNotification(observer, element, name as CFString, context)
+    // MARK: - Callback bridge
+
+    fileprivate func handleNotification() {
+        onCaretMoved?()
     }
+}
 
-    private func removeNotification(_ name: String, on element: AXUIElement, observer: AXObserver) {
-        _ = AXObserverRemoveNotification(observer, element, name as CFString)
-    }
-
-    private static let observerCallback: AXObserverCallback = { _, _, name, refcon in
-        guard let refcon else { return }
-        let owner = Unmanaged<CaretChangeObserver>.fromOpaque(refcon).takeUnretainedValue()
-        let notification = name as String
-        Task { @MainActor in
-            owner.handleNotification(notification)
-        }
-    }
-
-    private func handleNotification(_ name: String) {
-        if name == kAXFocusedUIElementChangedNotification
-            || name == kAXFocusedWindowChangedNotification
-            || name == kAXUIElementDestroyedNotification {
-            refreshFocusedElementObservation()
-        }
-
-        scheduleRefresh()
-    }
-
-    private func scheduleRefresh() {
-        pendingRefresh?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self, self.isRunning else { return }
-                self.onCaretChanged?()
-            }
-        }
-        pendingRefresh = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02, execute: work)
+/// C-compatible AXObserver callback. Bridges back into `CaretChangeObserver`
+/// via the refcon pointer, matching the same pattern EventTapManager uses for
+/// its CGEventTap callback (AX/CG callbacks can't capture Swift context).
+private let axObserverCallback: AXObserverCallback = { _, _, _, refcon in
+    guard let refcon else { return }
+    let observer = Unmanaged<CaretChangeObserver>.fromOpaque(refcon).takeUnretainedValue()
+    Task { @MainActor in
+        observer.handleNotification()
     }
 }

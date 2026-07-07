@@ -1,37 +1,63 @@
 import AppKit
 
-struct AppCompatibility {
-    let prefersDerivedCaretGeometry: Bool
-    let shouldEnableEnhancedAccessibility: Bool
+/// Bundle-ID-keyed table of known AX quirks in specific apps, modeled after
+/// KeyType's `AppCompatibility` package. Glotto's overlay positioning logic
+/// consults this to know when to skip straight to a cheaper/more reliable
+/// strategy instead of trusting a given app's AX responses.
+///
+/// This is intentionally small and additive — it never blocks composition,
+/// it only tunes *how* AccessibilityBridge resolves the caret rect for a
+/// given frontmost app.
+enum AppCompatibility {
 
-    static var current: AppCompatibility {
-        let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+    struct Quirks {
+        /// If true, skip the exact `AXBoundsForRange` call entirely and go
+        /// straight to the deep Chromium child-traversal strategy, since this
+        /// app is known to return stale/incorrect bounds on the top-level element.
+        var preferDeepTraversal: Bool = false
 
-        let webBackedBundles: Set<String> = [
-            "com.google.Chrome",
-            "com.google.Chrome.canary",
-            "com.microsoft.edgemac",
-            "com.brave.Browser",
-            "com.tinyspeck.slackmacgap",
-            "com.microsoft.VSCode",
-            "com.microsoft.VSCodeInsiders",
-            "com.hnc.Discord",
-            "notion.id"
-        ]
+        /// If true, Glotto should not arm composition mode at all in this app
+        /// (e.g. system password fields, Terminal in some configurations where
+        /// injected paste could clobber a shell command usage).
+        var disableComposition: Bool = false
+    }
 
-        let derivedFirstBundles: Set<String> = [
-            "com.google.Chrome",
-            "com.microsoft.edgemac",
-            "com.brave.Browser",
-            "com.tinyspeck.slackmacgap",
-            "com.microsoft.VSCode",
-            "com.microsoft.VSCodeInsiders",
-            "notion.id"
-        ]
+    /// Known bundle IDs with special handling. Chromium/Electron-based apps
+    /// are the biggest offenders for stale/zero AXBoundsForRange results.
+    private static let overrides: [String: Quirks] = [
+        "com.google.Chrome": Quirks(preferDeepTraversal: true),
+        "com.microsoft.edgemac": Quirks(preferDeepTraversal: true),
+        "com.brave.Browser": Quirks(preferDeepTraversal: true),
+        "com.tinyspeck.slackmacgap": Quirks(preferDeepTraversal: true),
+        "com.hnc.Discord": Quirks(preferDeepTraversal: true),
+        "com.microsoft.VSCode": Quirks(preferDeepTraversal: true),
+        "com.figma.Desktop": Quirks(preferDeepTraversal: true),
+        "notion.id": Quirks(preferDeepTraversal: true),
 
-        return AppCompatibility(
-            prefersDerivedCaretGeometry: derivedFirstBundles.contains(bundleID),
-            shouldEnableEnhancedAccessibility: webBackedBundles.contains(bundleID)
-        )
+        // Password managers / secure fields: never arm composition here.
+        "com.agilebits.onepassword7": Quirks(disableComposition: true),
+        "com.1password.1password": Quirks(disableComposition: true),
+        "com.apple.SecurityAgent": Quirks(disableComposition: true),
+    ]
+
+    /// Returns quirks for the frontmost application, or default (empty) quirks
+    /// if the app isn't in the table.
+    static func quirks(forBundleID bundleID: String?) -> Quirks {
+        guard let bundleID else { return Quirks() }
+        return overrides[bundleID] ?? Quirks()
+    }
+
+    /// Convenience: quirks for whatever app currently owns the given PID.
+    static func quirks(forPID pid: pid_t?) -> Quirks {
+        guard let pid,
+              let app = NSRunningApplication(processIdentifier: pid),
+              let bundleID = app.bundleIdentifier
+        else { return Quirks() }
+        return quirks(forBundleID: bundleID)
+    }
+
+    /// Convenience: quirks for the current frontmost application.
+    static func quirksForFrontmostApp() -> Quirks {
+        quirks(forBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
     }
 }

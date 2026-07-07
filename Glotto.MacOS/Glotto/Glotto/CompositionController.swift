@@ -220,8 +220,14 @@ final class CompositionController: ObservableObject {
             let profile = await self.session.profile
             guard !text.isEmpty else { return }
 
-            await MainActor.run { self.session.isLoading = true }
-            self.overlayController.update(session: await self.session)
+            await MainActor.run {
+                self.session.isLoading = true
+                // Reposition here too: the loading placeholder can differ in
+                // height from whatever was previously shown (e.g. first
+                // keystroke after a resize), and previously this call skipped
+                // reposition entirely, only fixed up on the *next* keystroke.
+                self.overlayController.update(session: self.session, reposition: true)
+            }
 
             let results = await self.service.candidates(for: text, profile: profile)
 
@@ -240,7 +246,12 @@ final class CompositionController: ObservableObject {
                 self.session.selectionIndex = 0
                 self.session.lookupFailed = results.isEmpty
                 
+                // The panel's height almost always changes here (loading
+                // placeholder -> real candidate list), so this is the update
+                // that most needs a reposition — previously this only happened
+                // implicitly on the next keystroke via updateOverlay/showOrUpdate.
                 self.updateOverlay()
+                self.overlayController.reposition()
             }
         }
     }
