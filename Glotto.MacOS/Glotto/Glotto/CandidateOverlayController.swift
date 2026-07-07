@@ -10,6 +10,7 @@ final class CandidateOverlayController {
 
     private var panel: NSPanel?
     private var hostingView: NSHostingView<CandidatePanelView>?
+    private let caretObserver = CaretChangeObserver()
     private let panelWidth: CGFloat = 320
     private let panelPadding: CGFloat = 4   // gap between caret bottom and panel top
 
@@ -24,6 +25,7 @@ final class CandidateOverlayController {
     func showOrUpdate(session: CompositionSession) {
         self.isPresented = true
         self.lastSession = session
+        startCaretObservation()
         let isFirstShow = (panel == nil)
         if panel == nil {
             createPanel(session: session)
@@ -47,6 +49,9 @@ final class CandidateOverlayController {
 
     func update(session: CompositionSession) {
         hostingView?.rootView = makePanelView(session: session)
+        if isPresented {
+            reposition()
+        }
     }
 
     func hide() {
@@ -64,13 +69,16 @@ final class CandidateOverlayController {
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().alphaValue = 0.0
         }, completionHandler: { [weak self] in
-            guard let self else { return }
-            // Only orderOut and clean up if it was not shown again during the fadeout
-            if !self.isPresented {
-                panel.orderOut(nil)
-                // Clear references so the next creation triggers onAppear cleanly
-                self.panel = nil
-                self.hostingView = nil
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Only orderOut and clean up if it was not shown again during the fadeout
+                if !self.isPresented {
+                    panel.orderOut(nil)
+                    // Clear references so the next creation triggers onAppear cleanly
+                    self.panel = nil
+                    self.hostingView = nil
+                    self.caretObserver.stop()
+                }
             }
         })
     }
@@ -122,7 +130,8 @@ final class CandidateOverlayController {
 
         // Try to get the caret rect and place the panel just below it.
         let origin: NSPoint
-        if let caretRect = AccessibilityBridge.caretScreenRect() {
+        if let caretGeometry = AccessibilityBridge.caretGeometry() {
+            let caretRect = caretGeometry.rect
             origin = NSPoint(
                 x: caretRect.minX,
                 y: caretRect.minY - panelSize.height - panelPadding
@@ -145,6 +154,13 @@ final class CandidateOverlayController {
 
         let clampedOrigin = clamp(origin: origin, panelSize: panelSize)
         panel.setFrameOrigin(clampedOrigin)
+    }
+
+    private func startCaretObservation() {
+        caretObserver.onCaretChanged = { [weak self] in
+            self?.reposition()
+        }
+        caretObserver.start()
     }
 
     /// Keep the panel fully on-screen across multiple monitors.

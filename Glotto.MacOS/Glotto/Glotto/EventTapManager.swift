@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import os
 
 /// Owns the CGEventTap that intercepts keystrokes system-wide while composition mode is armed.
 ///
@@ -13,6 +14,7 @@ import Carbon.HIToolbox
 final class EventTapManager {
 
     weak var compositionController: CompositionController?
+    private let logger = Logger(subsystem: "dev.noobnotfound.glotto", category: "EventTap")
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -23,11 +25,11 @@ final class EventTapManager {
     func arm() {
         guard !isArmed else { return }
         guard installTap() else {
-            print("[EventTapManager] Failed to install CGEventTap — Accessibility/Input Monitoring missing?")
+            logger.error("Failed to install CGEventTap. Accessibility/Input Monitoring may be missing.")
             return
         }
         isArmed = true
-        print("[EventTapManager] Armed ✓")
+        logger.info("Event tap armed.")
     }
 
     func disarm() {
@@ -35,7 +37,7 @@ final class EventTapManager {
         removeTap()
         compositionController?.cancelComposition()
         isArmed = false
-        print("[EventTapManager] Disarmed")
+        logger.info("Event tap disarmed.")
     }
 
     func toggle() {
