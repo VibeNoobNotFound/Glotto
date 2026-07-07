@@ -1,23 +1,14 @@
-﻿using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.ApplicationModel;
-using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
-
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
+using Glotto.WinUI.Tray;
+using Glotto.WinUI.Composition;
+using Glotto.WinUI.Core;
+using Glotto.WinUI.Input;
+using Glotto.WinUI.Interop;
+using Glotto.WinUI.Services;
+using Glotto.WinUI.UI;
+using static Glotto.WinUI.Interop.NativeMethods;
 
 namespace Glotto.WinUI
 {
@@ -26,7 +17,21 @@ namespace Glotto.WinUI
     /// </summary>
     public partial class App : Application
     {
-        private Window? _window;
+        private TrayIconManager? _trayIconManager;
+        private SettingsWindow? _settingsWindow;
+        
+        // Infrastructure / controller graph
+        private UiAutomationBridge? _uiaBridge;
+        private TextInjector? _textInjector;
+        private TransliterationService? _transliterationService;
+        private CandidateOverlayController? _overlayController;
+        private CompositionController? _compositionController;
+        private KeyboardHookManager? _keyboardHookManager;
+        private HotkeyManager? _hotkeyManager;
+
+        // Foreground window event hook handle
+        private IntPtr _winEventHook = IntPtr.Zero;
+        private WinEventProc? _winEventProc;
 
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
@@ -40,11 +45,98 @@ namespace Glotto.WinUI
         /// <summary>
         /// Invoked when the application is launched.
         /// </summary>
-        /// <param name="args">Details about the launch request and process.</param>
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
-            _window = new MainWindow();
-            _window.Activate();
+            var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+
+            // 1. Build the controller graph
+            _uiaBridge = new UiAutomationBridge();
+            _textInjector = new TextInjector(_uiaBridge);
+            _transliterationService = new TransliterationService();
+            _overlayController = new CandidateOverlayController(_uiaBridge, dispatcherQueue);
+            
+            _compositionController = new CompositionController(
+                LanguageProfile.Sinhala, 
+                _transliterationService, 
+                _textInjector, 
+                _overlayController,
+                dispatcherQueue
+            );
+
+            _keyboardHookManager = new KeyboardHookManager(dispatcherQueue);
+            _keyboardHookManager.SetCompositionController(_compositionController);
+
+            _hotkeyManager = new HotkeyManager(dispatcherQueue);
+            _hotkeyManager.HotkeyTriggered += OnHotkeyTriggered;
+            _hotkeyManager.Start();
+
+            // 2. Initialize Tray Icon
+            _trayIconManager = new TrayIconManager(
+                onToggle: ToggleComposition,
+                onOpenSettings: OpenSettings,
+                onQuit: QuitApp
+            );
+
+            // 3. Register Foreground App Change WinEventHook
+            // When user switches apps, cancel current composition cleanly (same as macOS counterpart)
+            _winEventProc = OnForegroundWindowChanged;
+            _winEventHook = SetWinEventHook(
+                EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+                IntPtr.Zero, _winEventProc, 0, 0, WINEVENT_OUTOFCONTEXT
+            );
+
+            System.Diagnostics.Debug.WriteLine("[App] Glotto Windows Backend Started ✓");
+        }
+
+        private void OnHotkeyTriggered(object? sender, EventArgs e)
+        {
+            ToggleComposition();
+        }
+
+        private void ToggleComposition()
+        {
+            if (_keyboardHookManager is null) return;
+
+            _keyboardHookManager.Toggle();
+            var armed = _keyboardHookManager.IsArmed;
+
+            _trayIconManager?.UpdateIconState(armed);
+        }
+
+        private void OpenSettings()
+        {
+            if (_settingsWindow is not null)
+            {
+                _settingsWindow.Activate();
+                return;
+            }
+
+            _settingsWindow = new SettingsWindow();
+            _settingsWindow.Closed += (s, e) => _settingsWindow = null;
+            _settingsWindow.Activate();
+        }
+
+        private void OnForegroundWindowChanged(
+            IntPtr hWinEventHook, uint @event, IntPtr hwnd, int idObject, int idChild, uint idEventThread, uint dwmsEventTime)
+        {
+            // Hop to dispatcher to ensure thread safety
+            _compositionController?.CancelComposition();
+        }
+
+        private void QuitApp()
+        {
+            // Clean up hooks and resources
+            if (_winEventHook != IntPtr.Zero)
+            {
+                UnhookWinEvent(_winEventHook);
+            }
+            
+            _keyboardHookManager?.Dispose();
+            _hotkeyManager?.Dispose();
+            _trayIconManager?.Dispose();
+            _uiaBridge?.Dispose();
+
+            Exit();
         }
     }
 }
