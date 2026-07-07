@@ -68,4 +68,65 @@ fastlane/test_output
 # Local Summaries
 Glotto.MacOS/Glotto/walkthrough.md
 
+# ─────────────────────────────────────────────────────────────────────────────
+# C# / .NET / WinUI (Glotto.WinUI)
+# ─────────────────────────────────────────────────────────────────────────────
 
+# Build output
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio / Rider IDE files
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+*.sln.iml
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+project.nuget.cache
+.nuget/
+
+# MSBuild logs
+msbuild.log
+msbuild.err
+msbuild.wrn
+
+# Windows App SDK / WinUI packaging artifacts
+AppPackages/
+BundleArtifacts/
+_pkginfo.txt
+*.appx
+*.appxbundle
+*.appxsym
+*.msix
+*.msixbundle
+*.msixsym
+
+# Generated source files (XAML codegen, ResX)
+*.g.cs
+*.g.i.cs
+*.baml
+
+# Crash dumps
+*.dmp
+
+# Windows-specific junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk

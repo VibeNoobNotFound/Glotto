@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Glotto.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Glotto.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
